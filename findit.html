@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FindIt – Campus Lost & Found</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0f14; --surface: #161820; --surface2: #1e2028;
+  --border: rgba(255,255,255,0.07); --text: #eef0f5; --muted: #6b7080;
+  --accent: #5b8dff; --found: #22c97a; --lost: #4da6ff;
+  --waiting: #8a8f9e; --recovered: #e8a838; --radius: 18px;
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'DM Sans', sans-serif; min-height: 100vh; overflow-x: hidden;
+}
+body::before {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+}
+button { cursor: pointer; font-family: inherit; }
+
+/* ── TOPBAR ── */
+.topbar {
+  position: fixed; top: 14px; left: 14px; right: 14px; z-index: 100;
+  display: flex; align-items: center; gap: 9px;
+}
+.circle-btn {
+  width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+  background: var(--surface2); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s; outline: none;
+}
+.circle-btn:hover { background: #23252e; }
+.logo-btn span { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 15px; }
+.menu-btn { flex-direction: column; gap: 4px; }
+.bar { width: 16px; height: 2px; background: var(--text); border-radius: 2px; }
+.search-island {
+  flex: 1; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 50px; display: flex; align-items: center; gap: 8px;
+  padding: 0 15px; height: 44px; transition: border-color 0.2s;
+}
+.search-island:focus-within { border-color: rgba(91,141,255,0.35); }
+.search-island svg { color: var(--muted); flex-shrink: 0; }
+.search-island input {
+  background: none; border: none; outline: none;
+  color: var(--text); font-size: 13.5px; width: 100%;
+}
+.search-island input::placeholder { color: var(--muted); }
+.search-clear {
+  background: none; border: none; color: var(--muted);
+  padding: 0; font-size: 16px; line-height: 1; display: none;
+  transition: color 0.12s;
+}
+.search-clear:hover { color: var(--text); }
+.search-clear.visible { display: block; }
+
+/* ── MENU DROPDOWN ── */
+.menu-dropdown {
+  position: fixed; top: 70px; right: 14px; z-index: 99;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 14px; padding: 6px; min-width: 175px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+  opacity: 0; transform: translateY(-6px) scale(0.97);
+  pointer-events: none; transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+}
+.menu-dropdown.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: all; }
+.menu-item {
+  display: flex; align-items: center; padding: 10px 13px; border-radius: 9px;
+  font-size: 14px; color: var(--text); transition: background 0.12s; gap: 8px;
+}
+.menu-item:hover { background: rgba(255,255,255,0.05); }
+.menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.menu-item.login { color: var(--accent); font-weight: 500; }
+.menu-item.danger { color: #e05a5a; }
+.menu-avatar-sm {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+
+/* ── FILTERS ── */
+.search-filters {
+  display: flex; gap: 7px; overflow-x: auto;
+  padding: 74px 14px 14px; scrollbar-width: none;
+  position: relative; z-index: 10;
+}
+.search-filters::-webkit-scrollbar { display: none; }
+.filter-chip {
+  padding: 5px 13px; border-radius: 50px; flex-shrink: 0;
+  background: var(--surface2); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 500; color: var(--muted); transition: all 0.12s;
+}
+.filter-chip:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+.filter-chip.active { background: rgba(91,141,255,0.1); border-color: rgba(91,141,255,0.3); color: var(--accent); }
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align: center; padding: 60px 20px;
+  display: none; flex-direction: column; align-items: center; gap: 10px;
+  position: relative; z-index: 5;
+}
+.empty-state.visible { display: flex; }
+.empty-icon { font-size: 40px; opacity: 0.5; }
+.empty-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 16px; }
+.empty-sub { font-size: 13px; color: var(--muted); }
+
+/* ── FEED ── */
+.feed { max-width: 640px; margin: 0 auto; padding: 0 14px 100px; display: flex; flex-direction: column; gap: 11px; position: relative; z-index: 5; }
+
+/* ── CARD ── */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: visible;
+  transition: border-color 0.15s, opacity 0.3s;
+  animation: fadeUp 0.35s ease both;
+  position: relative;
+}
+.card.hidden { display: none; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+.card:hover { border-color: rgba(255,255,255,0.11); }
+.card-inner { overflow: hidden; border-radius: var(--radius); }
+
+.card-header { display: flex; align-items: flex-start; padding: 13px 13px 0; gap: 9px; }
+.card-avatar {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff; transition: opacity 0.15s;
+}
+.card-avatar:hover { opacity: 0.8; }
+.card-meta { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.location-tag {
+  font-size: 12px; font-weight: 600; color: var(--accent);
+  font-family: 'Syne', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.location-tag:hover { text-decoration: underline; }
+.username { font-size: 11px; color: var(--muted); }
+.username:hover { color: var(--text); }
+
+/* RIGHT SIDE — status + meta inline */
+.card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+.card-status-row { display: flex; align-items: center; gap: 6px; }
+.card-category { font-size: 10px; color: var(--muted); background: var(--surface2); border: 1px solid var(--border); padding: 2px 7px; border-radius: 50px; white-space: nowrap; }
+.card-date { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.status-badge { padding: 3px 9px; border-radius: 50px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.status-found { background: rgba(34,201,122,0.1); color: var(--found); border: 1px solid rgba(34,201,122,0.2); }
+.status-lost { background: rgba(77,166,255,0.1); color: var(--lost); border: 1px solid rgba(77,166,255,0.2); }
+.status-waiting { background: rgba(138,143,158,0.1); color: var(--waiting); border: 1px solid rgba(138,143,158,0.18); }
+.status-recovered { background: rgba(232,168,56,0.12); color: var(--recovered); border: 1px solid rgba(232,168,56,0.25); }
+
+.card-title { padding: 9px 13px 3px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; line-height: 1.3; }
+.card-desc { padding: 0 13px 9px; font-size: 13px; color: #9ba1b0; line-height: 1.55; }
+.card-image { margin: 0 13px 9px; border-radius: 10px; overflow: hidden; aspect-ratio: 16/9; background: var(--surface2); position: relative; }
+.img-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 42px; }
+.img-p1 { background: linear-gradient(135deg,#1a2340,#2a3560); }
+.img-p2 { background: linear-gradient(135deg,#1a2a1e,#1e3a26); }
+.img-p3 { background: linear-gradient(135deg,#2a1a2e,#3a2040); }
+.img-p4 { background: linear-gradient(135deg,#2a2218,#3a3020); }
+
+/* ── CARD ACTIONS BAR ── */
+.card-actions { display: flex; align-items: center; border-top: 1px solid var(--border); padding: 0 5px; }
+.action-btn {
+  display: flex; align-items: center; gap: 5px; padding: 9px 10px; border-radius: 8px;
+  font-size: 12px; color: var(--muted); background: none; border: none; transition: all 0.12s;
+}
+.action-btn:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+.spacer { flex: 1; }
+
+/* THREE DOTS MENU */
+.dots-btn {
+  width: 30px; height: 30px; border-radius: 8px; border: none;
+  background: none; color: var(--muted);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; letter-spacing: 1px; transition: all 0.12s;
+  padding: 0; line-height: 1;
+}
+.dots-btn:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+
+.card-menu {
+  position: absolute; right: 10px; bottom: 44px; z-index: 50;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 5px; min-width: 150px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+  opacity: 0; transform: scale(0.95) translateY(4px); pointer-events: none;
+  transform-origin: bottom right;
+  transition: all 0.15s cubic-bezier(0.34,1.56,0.64,1);
+}
+.card-menu.open { opacity: 1; transform: scale(1) translateY(0); pointer-events: all; }
+.card-menu-item {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px; border-radius: 8px;
+  font-size: 13px; color: var(--text); transition: background 0.1s; white-space: nowrap;
+}
+.card-menu-item:hover { background: rgba(255,255,255,0.05); }
+.card-menu-item.danger { color: #e05a5a; }
+.card-menu-item.danger:hover { background: rgba(224,90,90,0.08); }
+.card-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
+/* ── COMMENTS PANEL ── */
+.comments-panel {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+  background: var(--surface); border-top: 1px solid var(--border);
+  border-radius: 22px 22px 0 0; max-height: 82vh;
+  transform: translateY(100%); transition: transform 0.38s cubic-bezier(0.32,0.72,0,1);
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 -10px 40px rgba(0,0,0,0.45);
+}
+.comments-panel.open { transform: translateY(0); }
+.panel-handle {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 13px 16px 11px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.panel-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; }
+.panel-right { display: flex; gap: 8px; align-items: center; }
+.panel-share {
+  background: none; border: none; color: var(--muted);
+  display: flex; align-items: center; gap: 5px; font-size: 12px;
+  padding: 4px 8px; border-radius: 7px; transition: color 0.12s;
+}
+.panel-share:hover { color: var(--text); }
+.close-panel {
+  background: var(--surface2); border: none; color: var(--muted);
+  width: 26px; height: 26px; border-radius: 50%; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+}
+.close-panel:hover { color: var(--text); }
+.comments-scroll { overflow-y: auto; flex: 1; padding: 13px 15px; display: flex; flex-direction: column; gap: 13px; }
+.comment { display: flex; gap: 9px; }
+.comment-avatar {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: #fff;
+}
+.comment-body { flex: 1; }
+.comment-user { font-size: 12px; font-weight: 600; color: var(--accent); margin-bottom: 2px; }
+.comment-user:hover { text-decoration: underline; }
+.comment-text { font-size: 13px; color: #b0b6c5; line-height: 1.5; }
+.comment-meta { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.comment-time { font-size: 11px; color: var(--muted); }
+.reply-btn { font-size: 11px; color: var(--muted); background: none; border: none; transition: color 0.12s; }
+.reply-btn:hover { color: var(--accent); }
+.reply-form { margin-top: 7px; display: none; background: var(--surface2); border-radius: 9px; overflow: hidden; border: 1px solid var(--border); }
+.reply-form.visible { display: flex; }
+.reply-input { flex: 1; background: none; border: none; padding: 7px 11px; color: var(--text); font-size: 12px; outline: none; }
+.reply-send { background: none; border: none; color: var(--accent); padding: 7px 11px; font-size: 12px; font-weight: 500; }
+.replies { margin-top: 7px; display: flex; flex-direction: column; gap: 7px; }
+.reply { display: flex; gap: 7px; }
+.reply-avatar { width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; }
+.comment-input-wrap { padding: 9px 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.comment-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 50px; padding: 8px 14px; color: var(--text); font-size: 13px; outline: none; transition: border-color 0.2s; }
+.comment-input:focus { border-color: rgba(91,141,255,0.3); }
+.send-btn { background: var(--accent); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity 0.15s; }
+.send-btn:hover { opacity: 0.85; }
+
+/* ── PROFILE PANEL ── */
+.sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity 0.25s; z-index: 290; }
+.sheet-overlay.open { opacity: 1; pointer-events: all; }
+
+.bottom-sheet {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 300;
+  background: var(--surface); border-radius: 22px 22px 0 0;
+  border-top: 1px solid var(--border);
+  transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
+  max-height: 80vh; overflow-y: auto;
+  padding: 20px 20px 36px;
+}
+.bottom-sheet.open { transform: translateY(0); }
+.bottom-sheet.z-400 { z-index: 400; }
+
+.profile-top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.profile-left { display: flex; align-items: center; gap: 12px; }
+.profile-pic { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 800; font-family: 'Syne', sans-serif; color: #fff; flex-shrink: 0; }
+.profile-name { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 17px; }
+.profile-handle { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.profile-points { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.sheet-close-btn { background: none; border: none; color: var(--muted); font-size: 18px; padding: 4px; }
+.profile-stats { display: flex; gap: 22px; margin-bottom: 14px; }
+.stat .stat-num { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 19px; }
+.stat .stat-label { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.profile-msg-btn {
+  display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px;
+  border-radius: 10px; background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text); font-size: 13px; transition: opacity 0.15s; margin-bottom: 18px;
+}
+.profile-msg-btn:hover { opacity: 0.75; }
+.activity-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 9px; }
+.activity-item { display: flex; align-items: center; gap: 9px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.activity-item:last-child { border-bottom: none; }
+.activity-item:hover { background: rgba(255,255,255,0.02); }
+.act-badge { padding: 2px 8px; border-radius: 50px; font-size: 10px; font-weight: 600; flex-shrink: 0; }
+.chevron-right { flex-shrink: 0; }
+
+/* ── HISTORY DETAIL ── */
+.history-sheet { z-index: 350; }
+
+/* ── DM ── */
+.dm-sheet {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 410;
+  background: var(--surface); border-radius: 22px 22px 0 0;
+  border-top: 1px solid var(--border);
+  height: 68vh; display: flex; flex-direction: column;
+  transform: translateY(100%); transition: transform 0.35s cubic-bezier(0.32,0.72,0,1);
+}
+.dm-sheet.open { transform: translateY(0); }
+.dm-header { display: flex; align-items: center; gap: 10px; padding: 13px 17px 11px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.dm-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; color: #fff; flex-shrink: 0; }
+.dm-name { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; }
+.dm-online { font-size: 11px; color: var(--found); }
+.dm-close { margin-left: auto; background: none; border: none; color: var(--muted); font-size: 18px; padding: 4px; }
+.dm-messages { flex: 1; overflow-y: auto; padding: 13px 17px; display: flex; flex-direction: column; gap: 7px; }
+.dm-msg { max-width: 72%; padding: 8px 12px; border-radius: 14px; font-size: 13px; line-height: 1.5; }
+.dm-msg.them { background: var(--surface2); border-bottom-left-radius: 4px; align-self: flex-start; }
+.dm-msg.me { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; align-self: flex-end; }
+.dm-input-wrap { display: flex; gap: 8px; padding: 9px 17px 22px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.dm-input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 50px; padding: 8px 14px; color: var(--text); font-size: 13px; outline: none; transition: border-color 0.2s; }
+.dm-input:focus { border-color: rgba(91,141,255,0.3); }
+
+/* ── LOCATION MODAL ── */
+.loc-sheet { z-index: 320; }
+.loc-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
+.loc-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 16px; }
+.loc-count { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+.loc-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 13px; overflow: hidden; margin-bottom: 9px; }
+.loc-card-head { display: flex; align-items: flex-start; padding: 11px 12px 0; gap: 8px; }
+.loc-card-meta { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.loc-card-meta .lc-loc { font-size: 11px; font-weight: 600; color: var(--accent); font-family: 'Syne', sans-serif; }
+.loc-card-meta .lc-uid { font-size: 10px; color: var(--muted); }
+.loc-card-title { padding: 7px 12px 3px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; line-height: 1.3; }
+.loc-card-desc { padding: 0 12px 10px; font-size: 12px; color: #9ba1b0; }
+
+/* ── MODALS (center) ── */
+.modal-bg {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(7px);
+  display: flex; align-items: center; justify-content: center; padding: 18px;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s;
+}
+.modal-bg.open { opacity: 1; pointer-events: all; }
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 20px; padding: 20px; width: 100%; max-width: 500px;
+  transform: scale(0.97); transition: transform 0.3s cubic-bezier(0.34,1.2,0.64,1);
+  max-height: 90vh; overflow-y: auto;
+}
+.modal-bg.open .modal-box { transform: scale(1); }
+.modal-title { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 17px; margin-bottom: 16px; }
+.form-row { display: flex; gap: 9px; margin-bottom: 11px; }
+.form-group { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.form-label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.4px; text-transform: uppercase; }
+.form-input, .form-select, .form-textarea {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 12px; color: var(--text);
+  font-size: 13px; outline: none; transition: border-color 0.2s; width: 100%;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus { border-color: rgba(91,141,255,0.3); }
+.form-textarea { resize: vertical; min-height: 68px; }
+.form-select { appearance: none; }
+.upload-area { background: var(--surface2); border: 1.5px dashed var(--border); border-radius: 11px; padding: 18px; text-align: center; margin-bottom: 12px; transition: border-color 0.2s; }
+.upload-area:hover { border-color: rgba(91,141,255,0.3); }
+.upload-text { font-size: 13px; color: var(--muted); }
+.upload-optional { font-size: 11px; color: var(--muted); opacity: 0.6; margin-top: 3px; }
+.modal-actions { display: flex; gap: 8px; }
+.btn-cancel { flex: 1; padding: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 13px; transition: opacity 0.15s; }
+.btn-submit { flex: 2; padding: 10px; background: var(--accent); border: none; border-radius: 10px; color: #fff; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
+.btn-cancel:hover, .btn-submit:hover { opacity: 0.75; }
+.btn-full { width: 100%; padding: 11px; border-radius: 10px; font-size: 14px; font-weight: 600; border: none; }
+
+/* STATUS PICKER */
+.status-options { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 12px; }
+.status-opt { padding: 6px 13px; border-radius: 50px; font-size: 12px; font-weight: 500; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); transition: all 0.12s; }
+.status-opt:hover { border-color: rgba(255,255,255,0.15); color: var(--text); }
+.status-opt.sel-found { background: rgba(34,201,122,0.12); color: var(--found); border-color: rgba(34,201,122,0.3); }
+.status-opt.sel-lost { background: rgba(77,166,255,0.12); color: var(--lost); border-color: rgba(77,166,255,0.3); }
+.status-opt.sel-waiting { background: rgba(138,143,158,0.12); color: var(--waiting); border-color: rgba(138,143,158,0.25); }
+.status-opt.sel-recovered { background: rgba(232,168,56,0.12); color: var(--recovered); border-color: rgba(232,168,56,0.3); }
+
+/* CONFIRM */
+.confirm-box { max-width: 340px; text-align: center; }
+.confirm-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+.confirm-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+.btn-danger { flex: 1; padding: 10px; background: rgba(224,90,90,0.15); border: 1px solid rgba(224,90,90,0.3); border-radius: 10px; color: #e05a5a; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
+.btn-danger:hover { opacity: 0.75; }
+
+/* ADMIN */
+.admin-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 50px; font-size: 10px; font-weight: 600; background: rgba(232,168,56,0.12); color: var(--recovered); border: 1px solid rgba(232,168,56,0.22); }
+.admin-action { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: 11px; border: 1px solid var(--border); margin-bottom: 8px; transition: background 0.12s; }
+.admin-action:hover { background: var(--surface2); }
+.admin-action-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
+.admin-action-text { font-size: 13px; font-weight: 500; }
+.admin-action-desc { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+/* SIGN-IN REQUIRED */
+.signin-req-box { max-width: 320px; text-align: center; }
+.signin-req-icon { font-size: 32px; margin-bottom: 12px; }
+.signin-req-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 6px; }
+.signin-req-sub { font-size: 13px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
+
+/* LOGIN */
+.login-box { max-width: 360px; }
+.login-logo { display: flex; align-items: center; gap: 9px; margin-bottom: 20px; }
+.login-logo-circle { width: 36px; height: 36px; border-radius: 50%; background: var(--surface2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; }
+.login-logo-circle span { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px; }
+.login-logo-name { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 17px; }
+.login-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 5px; }
+.login-sub { font-size: 13px; color: var(--muted); margin-bottom: 18px; line-height: 1.55; }
+.login-input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; color: var(--text); font-size: 14px; outline: none; transition: border-color 0.2s; margin-bottom: 6px; display: block; }
+.login-input:focus { border-color: rgba(91,141,255,0.35); }
+.login-admin-line { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+.login-admin-link { color: var(--accent); text-decoration: underline; text-decoration-color: transparent; transition: text-decoration-color 0.15s; }
+.login-admin-link:hover { text-decoration-color: var(--accent); }
+.login-note { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
+.login-close { display: block; text-align: center; margin-top: 13px; font-size: 13px; color: var(--muted); transition: color 0.15s; }
+.login-close:hover { color: var(--text); }
+.login-sent { display: none; text-align: center; padding: 6px 0; }
+.login-sent-icon { font-size: 34px; margin-bottom: 9px; }
+.login-sent-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 7px; }
+.login-sent-msg { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+/* FAB */
+.fab-post {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 100;
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--surface2); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.fab-post:hover { background: #23252e; }
+
+/* OVERLAY */
+.overlay { position: fixed; inset: 0; z-index: 195; background: rgba(0,0,0,0.45); opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+.overlay.show { opacity: 1; pointer-events: all; }
+
+/* TOAST */
+.toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px); z-index: 900; background: var(--surface2); border: 1px solid var(--border); border-radius: 50px; padding: 8px 18px; font-size: 13px; opacity: 0; transition: all 0.25s; pointer-events: none; white-space: nowrap; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+</style>
+</head>
+<body>
+
+<!-- ── TOPBAR ── -->
+<div class="topbar">
+  <button class="circle-btn logo-btn" onclick="goHome()"><span>Fi</span></button>
+  <div class="search-island">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" id="searchInput" placeholder="Search items, places, people…" autocomplete="off">
+    <button class="search-clear" id="searchClear" aria-label="Clear search">✕</button>
+  </div>
+  <button class="circle-btn menu-btn" id="menuBtn" onclick="toggleMenu()">
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+  </button>
+</div>
+
+<!-- MENU DROPDOWN -->
+<div class="menu-dropdown" id="menuDropdown">
+  <div id="menuNotLoggedIn">
+    <div class="menu-item login" onclick="openLogin()">Log in / Sign up</div>
+    <div class="menu-divider"></div>
+    <div class="menu-item" onclick="toggleMenu()">Settings</div>
+  </div>
+  <div id="menuLoggedIn" style="display:none">
+    <div class="menu-item" style="gap:8px;padding:8px 10px" onclick="openOwnProfile()">
+      <div class="menu-avatar-sm" id="menuAvatarSm" style="background:var(--accent)">Me</div>
+      <div>
+        <div style="font-size:13px;font-weight:600" id="menuUserName">My Profile</div>
+        <div style="font-size:11px;color:var(--muted)" id="menuUserHandle">u/me</div>
+      </div>
+    </div>
+    <div class="menu-divider"></div>
+    <div id="adminMenuItem" style="display:none" class="menu-item" onclick="openAdminPanel()">
+      <span style="font-size:13px;color:var(--recovered);font-weight:500">Admin Panel</span>
+    </div>
+    <div class="menu-item" onclick="signOut()">Sign out</div>
+    <div class="menu-item" onclick="toggleMenu()">Settings</div>
+  </div>
+</div>
+
+<!-- ── FILTER CHIPS ── -->
+<div class="search-filters">
+  <div class="filter-chip active" data-filter="all">All</div>
+  <div class="filter-chip" data-filter="found">Found</div>
+  <div class="filter-chip" data-filter="lost">Lost</div>
+  <div class="filter-chip" data-filter="waiting">Waiting</div>
+  <div class="filter-chip" data-filter="recovered">Recovered</div>
+  <div class="filter-chip" data-filter="main library">Library</div>
+  <div class="filter-chip" data-filter="cafeteria">Cafeteria</div>
+  <div class="filter-chip" data-filter="engineering">Engineering</div>
+  <div class="filter-chip" data-filter="dorms">Dorms</div>
+  <div class="filter-chip" data-filter="sports">Sports</div>
+</div>
+
+<!-- ── FEED ── -->
+<div class="feed" id="feed"></div>
+
+<!-- EMPTY STATE -->
+<div class="empty-state" id="emptyState">
+  <div class="empty-icon">🔍</div>
+  <div class="empty-title">Nothing found</div>
+  <div class="empty-sub">Try a different search term or filter</div>
+</div>
+
+<!-- ── FAB ── -->
+<button class="fab-post" onclick="tryPost()">
+  <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+</button>
+
+<!-- OVERLAY (comments) -->
+<div class="overlay" id="overlay" onclick="closeComments()"></div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ── COMMENTS PANEL ── -->
+<div class="comments-panel" id="commentsPanel">
+  <div class="panel-handle">
+    <span class="panel-title" id="panelTitle">Comments</span>
+    <div class="panel-right">
+      <button class="panel-share" onclick="shareItem(this)">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        Share
+      </button>
+      <button class="close-panel" onclick="closeComments()">✕</button>
+    </div>
+  </div>
+  <div class="comments-scroll" id="commentsScroll">
+    <div class="comment">
+      <div class="comment-avatar" style="background:#4da6ff" onclick="openProfile('Yousef','YS','#4da6ff','yousef_s')">YS</div>
+      <div class="comment-body">
+        <div class="comment-user" onclick="openProfile('Yousef','YS','#4da6ff','yousef_s')">u/yousef_s</div>
+        <div class="comment-text">Could this be mine? I was at the library around 3pm, had my AirPods case in my bag.</div>
+        <div class="comment-meta"><span class="comment-time">2 hours ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
+        <div class="reply-form"></div><div class="replies"></div>
+      </div>
+    </div>
+    <div class="comment">
+      <div class="comment-avatar" style="background:#22c97a" onclick="openProfile('Amir','AB','#22c97a','amir_b')">AB</div>
+      <div class="comment-body">
+        <div class="comment-user" onclick="openProfile('Amir','AB','#22c97a','amir_b')">u/amir_b</div>
+        <div class="comment-text">@yousef_s DM me with a photo of the case and I'll verify! Library desk will release it to you.</div>
+        <div class="comment-meta"><span class="comment-time">1 hour ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
+        <div class="reply-form"></div><div class="replies"></div>
+      </div>
+    </div>
+    <div class="comment">
+      <div class="comment-avatar" style="background:#a084f5">KM</div>
+      <div class="comment-body">
+        <div class="comment-user">u/khalid_m</div>
+        <div class="comment-text">FindIt has made this so much easier. Hope it reaches the owner!</div>
+        <div class="comment-meta"><span class="comment-time">45 min ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
+        <div class="reply-form"></div><div class="replies"></div>
+      </div>
+    </div>
+    <div class="comment">
+      <div class="comment-avatar" style="background:#ff6b6b">RI</div>
+      <div class="comment-body">
+        <div class="comment-user">u/rana_i</div>
+        <div class="comment-text">Library staff confirmed they have them — spotted when I went to return books!</div>
+        <div class="comment-meta"><span class="comment-time">10 min ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
+        <div class="reply-form"></div><div class="replies"></div>
+      </div>
+    </div>
+  </div>
+  <div class="comment-input-wrap">
+    <input class="comment-input" id="commentInput" placeholder="Write a comment…" onkeydown="if(event.key==='Enter')submitCommentClick()">
+    <button class="send-btn" onclick="submitCommentClick()">
+      <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ── PROFILE OVERLAY + SHEET ── -->
+<div class="sheet-overlay" id="profileOverlay" onclick="closeProfile()"></div>
+<div class="bottom-sheet" id="profileSheet">
+  <div class="profile-top-row">
+    <div class="profile-left">
+      <div class="profile-pic" id="pAvatar" style="background:#4da6ff">AB</div>
+      <div>
+        <div class="profile-name" id="pName">Amir B.</div>
+        <div class="profile-handle" id="pHandle">u/amir_b</div>
+        <div class="profile-points" id="pPoints">840 points</div>
+      </div>
+    </div>
+    <button class="sheet-close-btn" onclick="closeProfile()">✕</button>
+  </div>
+  <div class="profile-stats">
+    <div class="stat"><div class="stat-num">23</div><div class="stat-label">Posted</div></div>
+    <div class="stat"><div class="stat-num">18</div><div class="stat-label">Returned</div></div>
+    <div class="stat"><div class="stat-num">5</div><div class="stat-label">Recovered</div></div>
+  </div>
+  <button class="profile-msg-btn" id="profileMsgBtn" onclick="openDM()">
+    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Message
+  </button>
+  <div class="activity-label">Activity</div>
+  <div class="activity-item" onclick="openHistoryItem('AirPods Pro – Library','Found on study table row 3. Turned into library desk.','found','Main Library – 2nd Floor','Feb 16','Electronics')">
+    <span class="act-badge" style="background:rgba(34,201,122,0.1);color:var(--found);border:1px solid rgba(34,201,122,0.18)">Found</span>
+    <span style="font-size:13px">AirPods Pro – Library</span>
+    <span style="font-size:11px;color:var(--muted);margin-left:auto">Today</span>
+    <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>
+  <div class="activity-item" onclick="openHistoryItem('Student ID Card','Found near cashier in cafeteria. Handed to security.','found','Student Cafeteria','Feb 14','ID / Cards')">
+    <span class="act-badge" style="background:rgba(34,201,122,0.1);color:var(--found);border:1px solid rgba(34,201,122,0.18)">Found</span>
+    <span style="font-size:13px">Student ID – Cafeteria</span>
+    <span style="font-size:11px;color:var(--muted);margin-left:auto">3 days ago</span>
+    <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>
+  <div class="activity-item" onclick="openHistoryItem('Lost wallet – brown leather','Someone had lost their wallet by the vending machines. Helped locate the owner via FindIt DM.','recovered','Engineering Building','Feb 11','Wallet / Bags')">
+    <span class="act-badge" style="background:rgba(232,168,56,0.1);color:var(--recovered);border:1px solid rgba(232,168,56,0.2)">Helped</span>
+    <span style="font-size:13px">Located lost wallet owner</span>
+    <span style="font-size:11px;color:var(--muted);margin-left:auto">1 week ago</span>
+    <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>
+  <div class="activity-item" onclick="openHistoryItem('Laptop charger – USB-C white','Left in Engineering room 101. Posting for owner to claim.','found','Engineering Building','Feb 3','Electronics')">
+    <span class="act-badge" style="background:rgba(34,201,122,0.1);color:var(--found);border:1px solid rgba(34,201,122,0.18)">Found</span>
+    <span style="font-size:13px">Laptop charger – Engineering</span>
+    <span style="font-size:11px;color:var(--muted);margin-left:auto">2 weeks ago</span>
+    <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>
+</div>
+
+<!-- ── HISTORY ITEM SHEET ── -->
+<div class="bottom-sheet history-sheet" id="historySheet" style="z-index:350">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px" id="hTitle"></div>
+    <button class="sheet-close-btn" onclick="closeHistoryItem()">✕</button>
+  </div>
+  <div style="display:flex;gap:7px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+    <span class="status-badge" id="hStatus"></span>
+    <span class="card-category" id="hCategory"></span>
+    <span class="card-date" id="hDate"></span>
+    <span style="font-size:11px;color:var(--muted)" id="hLocation"></span>
+  </div>
+  <div style="font-size:13px;color:#9ba1b0;line-height:1.6;margin-bottom:16px" id="hDesc"></div>
+  <div style="font-size:11px;color:var(--muted);text-align:center;padding-top:8px;border-top:1px solid var(--border)">Historical post — read only</div>
+</div>
+
+<!-- ── DM SHEET ── -->
+<div class="dm-sheet" id="dmSheet">
+  <div class="dm-header">
+    <div class="dm-avatar" id="dmAvatar" style="background:#4da6ff">AB</div>
+    <div><div class="dm-name" id="dmName">Amir B.</div><div class="dm-online">online</div></div>
+    <button class="dm-close" onclick="closeDM()">✕</button>
+  </div>
+  <div class="dm-messages" id="dmMessages">
+    <div class="dm-msg them">Hey! I posted about the AirPods I found. Is it yours?</div>
+    <div class="dm-msg me">Yes! The case has a tiny scratch on the back right?</div>
+    <div class="dm-msg them">Exactly that one! Come pick it up at the library desk anytime today.</div>
+    <div class="dm-msg me">On my way, thank you so much!</div>
+  </div>
+  <div class="dm-input-wrap">
+    <input class="dm-input" placeholder="Message…" id="dmInput" onkeydown="if(event.key==='Enter')sendDMClick()">
+    <button class="send-btn" onclick="sendDMClick()">
+      <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ── LOCATION SHEET ── -->
+<div class="sheet-overlay" id="locOverlay" onclick="closeLocation()"></div>
+<div class="bottom-sheet loc-sheet" id="locSheet">
+  <div class="loc-header">
+    <div>
+      <div class="loc-title" id="locTitle"></div>
+      <div class="loc-count" id="locCount"></div>
+    </div>
+    <button class="sheet-close-btn" onclick="closeLocation()">✕</button>
+  </div>
+  <div id="locList"></div>
+</div>
+
+<!-- ── POST MODAL ── -->
+<div class="modal-bg" id="postModal" onclick="if(event.target===this)closePost()">
+  <div class="modal-box">
+    <div class="modal-title">Post an Item</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <select class="form-select">
+          <option>Main Library</option><option>Cafeteria</option>
+          <option>Engineering Building</option><option>Sports Complex</option>
+          <option>Dorms – Block A</option><option>Dorms – Block B</option>
+          <option>Admin Building</option><option>Parking Lot</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select class="form-select">
+          <option>Electronics</option><option>Bags</option><option>Accessories</option>
+          <option>Clothing</option><option>ID / Cards</option><option>Keys</option><option>Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select class="form-select">
+          <option>Found</option><option>Lost</option><option>Waiting</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:11px">
+      <label class="form-label">Title</label>
+      <input class="form-input" type="text" placeholder="e.g. Black backpack with red keychain">
+    </div>
+    <div class="form-group" style="margin-bottom:11px">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" placeholder="Describe the item, exact location, time, identifying features…"></textarea>
+    </div>
+    <div class="upload-area">
+      <div class="upload-text">Tap to add a photo</div>
+      <div class="upload-optional">Optional</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closePost()">Cancel</button>
+      <button class="btn-submit" onclick="closePost();showToast('Post submitted!')">Post</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── EDIT MODAL ── -->
+<div class="modal-bg" id="editModal" onclick="if(event.target===this)closeEdit()">
+  <div class="modal-box">
+    <div class="modal-title">Edit Post</div>
+    <div class="form-group" style="margin-bottom:11px">
+      <label class="form-label">Title</label>
+      <input class="form-input" id="editTitle" type="text">
+    </div>
+    <div class="form-group" style="margin-bottom:11px">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" id="editDesc"></textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Status</label>
+      <div class="status-options">
+        <div class="status-opt" data-status="found" onclick="selectStatus(this,'found')">Found</div>
+        <div class="status-opt" data-status="lost" onclick="selectStatus(this,'lost')">Lost</div>
+        <div class="status-opt" data-status="waiting" onclick="selectStatus(this,'waiting')">Waiting</div>
+        <div class="status-opt" data-status="recovered" onclick="selectStatus(this,'recovered')">Recovered</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEdit()">Cancel</button>
+      <button class="btn-submit" onclick="saveEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONFIRM DELETE ── -->
+<div class="modal-bg" id="confirmModal" onclick="if(event.target===this)closeConfirm()">
+  <div class="modal-box confirm-box">
+    <div class="confirm-title">Delete this post?</div>
+    <div class="confirm-sub">This can't be undone. The post will be permanently removed.</div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeConfirm()">Cancel</button>
+      <button class="btn-danger" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADMIN MODAL ── -->
+<div class="modal-bg" id="adminModal" onclick="if(event.target===this)closeAdmin()">
+  <div class="modal-box" style="max-width:400px">
+    <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;margin-bottom:4px;display:flex;align-items:center;gap:8px">
+      <span class="admin-badge">Admin</span> Panel
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:18px">Moderation actions for this member</div>
+    <div class="admin-action" onclick="adminAction('delete')">
+      <div class="admin-action-icon" style="background:rgba(224,90,90,0.12)">🗑</div>
+      <div><div class="admin-action-text">Delete Post</div><div class="admin-action-desc">Remove post from the platform</div></div>
+    </div>
+    <div class="admin-action" onclick="adminAction('ban')">
+      <div class="admin-action-icon" style="background:rgba(224,90,90,0.12)">🚫</div>
+      <div><div class="admin-action-text">Ban Member</div><div class="admin-action-desc">Block this user from posting</div></div>
+    </div>
+    <div class="admin-action" onclick="adminAction('unban')">
+      <div class="admin-action-icon" style="background:rgba(34,201,122,0.12)">✅</div>
+      <div><div class="admin-action-text">Unban Member</div><div class="admin-action-desc">Restore access for this user</div></div>
+    </div>
+    <div class="admin-action" onclick="adminAction('alert')" style="margin-bottom:0">
+      <div class="admin-action-icon" style="background:rgba(232,168,56,0.12)">⚠️</div>
+      <div><div class="admin-action-text">Send Alert</div><div class="admin-action-desc">Warn this user about their activity</div></div>
+    </div>
+    <div class="modal-actions" style="margin-top:14px">
+      <button class="btn-cancel" onclick="closeAdmin()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SIGN IN REQUIRED ── -->
+<div class="modal-bg" id="signinReqModal" onclick="if(event.target===this)closeSigninReq()">
+  <div class="modal-box signin-req-box">
+    <div class="signin-req-icon">🔒</div>
+    <div class="signin-req-title">Sign in to post</div>
+    <div class="signin-req-sub">You need to be signed in to create a post on FindIt.</div>
+    <button class="btn-full btn-submit" style="margin-bottom:8px" onclick="closeSigninReq();openLogin()">Sign in</button>
+    <button class="btn-full btn-cancel" onclick="closeSigninReq()">Maybe later</button>
+  </div>
+</div>
+
+<!-- ── LOGIN MODAL ── -->
+<div class="modal-bg" id="loginModal" onclick="if(event.target===this)closeLogin()">
+  <div class="modal-box login-box">
+    <div class="login-logo">
+      <div class="login-logo-circle"><span>Fi</span></div>
+      <div class="login-logo-name">FindIt</div>
+    </div>
+    <div id="loginFormWrap">
+      <div class="login-title">Log in or sign up</div>
+      <div class="login-sub">Enter your campus email and we'll send you a sign-in link — no password needed.</div>
+      <input class="login-input" type="email" id="loginEmail" placeholder="your@university.edu" onkeydown="if(event.key==='Enter')sendMagicLink()">
+      <div class="login-admin-line">
+        Admin authority?
+        <a class="login-admin-link" onclick="contactAdmin()">Contact us</a>
+      </div>
+      <button class="btn-full btn-submit" onclick="sendMagicLink()">Send sign-in link</button>
+      <div class="login-note">We'll email you a one-time link to continue.</div>
+    </div>
+    <div class="login-sent" id="loginSent">
+      <div class="login-sent-icon">📬</div>
+      <div class="login-sent-title">Check your inbox</div>
+      <div class="login-sent-msg" id="loginSentMsg"></div>
+    </div>
+    <span class="login-close" onclick="closeLogin()">Cancel</span>
+  </div>
+</div>
+
+<script>
+// ── APP STATE ──
+const App = {
+  isLoggedIn: false,
+  isAdmin: false,
+  currentUser: { uid: 'amir_b', name: 'Amir', initials: 'AB', color: '#4da6ff' },
+  activeFilter: 'all',
+  searchQuery: '',
+};
+
+// ── POSTS DATA ──
+const POSTS = [
+  {
+    id: 1, owner: 'amir_b', ownerName: 'Amir', ownerInitials: 'AB', ownerColor: '#4da6ff',
+    location: 'Main Library – 2nd Floor', category: 'Electronics',
+    status: 'found', title: 'AirPods Pro – Silver case, left earbud missing tip',
+    desc: 'Found on the study table near window row 3. Case has a small scratch on the back. Turned into the library desk — DM me if yours!',
+    date: 'Feb 16', comments: 14, hasImage: true, imgClass: 'img-p1', imgEmoji: '🎧',
+  },
+  {
+    id: 2, owner: 'sara_m', ownerName: 'Sara', ownerInitials: 'SM', ownerColor: '#e05a5a',
+    location: 'Engineering Building – Hallway B', category: 'Bags',
+    status: 'lost', title: 'Black North Face backpack — Has laptop & notes inside',
+    desc: 'Left it outside Room 204 during the fire drill around 2pm. Has a red keychain and stickers on the front pocket. Please help, finals notes inside.',
+    date: 'Feb 17', comments: 31, hasImage: true, imgClass: 'img-p2', imgEmoji: '🎒',
+  },
+  {
+    id: 3, owner: 'karim_o', ownerName: 'Karim', ownerInitials: 'KO', ownerColor: '#a084f5',
+    location: 'Student Cafeteria', category: 'Accessories',
+    status: 'waiting', title: 'Prescription glasses — thin silver frame, soft black case',
+    desc: 'Found on a table by the salad bar around lunchtime. Currently holding them. Posting while waiting to hear from the owner.',
+    date: 'Feb 17', comments: 6, hasImage: true, imgClass: 'img-p3', imgEmoji: '👓',
+  },
+  {
+    id: 4, owner: 'lina_n', ownerName: 'Lina', ownerInitials: 'LN', ownerColor: '#ffb347',
+    location: 'Sports Complex – Locker Room A', category: 'Electronics',
+    status: 'found', title: 'Samsung Galaxy Watch 5 — black rubber strap',
+    desc: 'Found on the bench near locker 42. Screen still works, no passcode. Left it with the front desk at the sports complex. Check in with your ID.',
+    date: 'Feb 15', comments: 9, hasImage: true, imgClass: 'img-p4', imgEmoji: '⌚',
+  },
+  {
+    id: 5, owner: 'yousef_s', ownerName: 'Yousef', ownerInitials: 'YS', ownerColor: '#4da6ff',
+    location: 'Dorms – Block B', category: 'Keys',
+    status: 'found', title: 'Room key on blue lanyard – Dorm block B',
+    desc: 'Found near the staircase on the 2nd floor. Key has no label. Holding at block B reception.',
+    date: 'Feb 17', comments: 2, hasImage: false, imgClass: '', imgEmoji: '',
+  },
+  {
+    id: 6, owner: 'mira_k', ownerName: 'Mira', ownerInitials: 'MK', ownerColor: '#ffb347',
+    location: 'Student Cafeteria', category: 'Accessories',
+    status: 'waiting', title: 'Blue Nalgene bottle with stickers',
+    desc: 'Left near the printing area in the library. Still holding for the owner.',
+    date: 'Feb 14', comments: 3, hasImage: false, imgClass: '', imgEmoji: '',
+  },
+  {
+    id: 7, owner: 'joud_r', ownerName: 'Joud', ownerInitials: 'JR', ownerColor: '#e05a5a',
+    location: 'Main Library – 2nd Floor', category: 'Electronics',
+    status: 'lost', title: 'USB-C charger cable – white, braided',
+    desc: 'Lost between study rooms 3 and 4 on Tuesday afternoon. Brand: Anker. Please DM if found.',
+    date: 'Feb 13', comments: 0, hasImage: false, imgClass: '', imgEmoji: '',
+  },
+  {
+    id: 8, owner: 'khalid_m', ownerName: 'Khalid', ownerInitials: 'KM', ownerColor: '#22c97a',
+    location: 'Admin Building', category: 'ID / Cards',
+    status: 'recovered', title: 'Student ID – found and returned to owner',
+    desc: 'Found near the registrar office. Was able to identify and return the ID directly to the student.',
+    date: 'Feb 12', comments: 5, hasImage: false, imgClass: '', imgEmoji: '',
+  },
+];
+
+// location → related post IDs
+const LOCATIONS = {
+  'Main Library – 2nd Floor': [1, 7],
+  'Engineering Building – Hallway B': [2],
+  'Student Cafeteria': [3, 6],
+  'Sports Complex – Locker Room A': [4],
+  'Dorms – Block B': [5],
+  'Admin Building': [8],
+};
+
+</script>
+<script>
+// ── RENDER ENGINE ──
+
+function statusClass(s) {
+  return { found:'status-found', lost:'status-lost', waiting:'status-waiting', recovered:'status-recovered' }[s] || 'status-found';
+}
+function statusLabel(s) {
+  return { found:'Found', lost:'Lost', waiting:'Waiting', recovered:'Recovered' }[s] || s;
+}
+
+function buildCard(post) {
+  const isOwner = App.isLoggedIn && (post.owner === App.currentUser.uid || App.isAdmin);
+  const imgHtml = post.hasImage
+    ? `<div class="card-image"><div class="img-placeholder ${post.imgClass}">${post.imgEmoji}</div></div>`
+    : '';
+  const dotsMenu = isOwner ? `
+    <div class="card-menu" id="menu-${post.id}">
+      <div class="card-menu-item" onclick="openEdit(${post.id});closeCardMenu(${post.id})">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit post
+      </div>
+      <div class="card-menu-sep"></div>
+      <div class="card-menu-item danger" onclick="openConfirm(${post.id});closeCardMenu(${post.id})">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
+        Delete post
+      </div>
+    </div>` : '';
+  const dotsBtn = isOwner
+    ? `<button class="dots-btn" onclick="toggleCardMenu(event,${post.id})" title="More options">•••</button>`
+    : '';
+
+  return `
+  <div class="card" data-post="${post.id}" data-owner="${post.owner}"
+       data-status="${post.status}" data-category="${post.category.toLowerCase()}"
+       data-location="${post.location.toLowerCase()}" data-title="${post.title.toLowerCase()}"
+       data-desc="${post.desc.toLowerCase()}">
+    <div class="card-inner">
+      <div class="card-header">
+        <div class="card-avatar" style="background:${post.ownerColor}"
+             onclick="openProfile('${post.ownerName}','${post.ownerInitials}','${post.ownerColor}','${post.owner}')">${post.ownerInitials}</div>
+        <div class="card-meta">
+          <span class="location-tag" onclick="openLocation('${post.location}')">${post.location}</span>
+          <span class="username" onclick="openProfile('${post.ownerName}','${post.ownerInitials}','${post.ownerColor}','${post.owner}')">u/${post.owner}</span>
+        </div>
+        <div class="card-right">
+          <div class="card-status-row">
+            <span class="card-category">${post.category}</span>
+            <span class="card-date">${post.date}</span>
+            <span class="status-badge ${statusClass(post.status)}" id="status-card-${post.id}">${statusLabel(post.status)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="card-title">${post.title}</div>
+      <div class="card-desc">${post.desc}</div>
+      ${imgHtml}
+      <div class="card-actions">
+        <button class="action-btn" onclick="openComments('${post.title.substring(0,30)}…')">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          ${post.comments} comment${post.comments !== 1 ? 's' : ''}
+        </button>
+        <div class="spacer"></div>
+        ${dotsBtn}
+        <button class="action-btn" onclick="shareItem(this)">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share
+        </button>
+      </div>
+    </div>
+    ${dotsMenu}
+  </div>`;
+}
+
+function renderFeed() {
+  const feed = document.getElementById('feed');
+  const empty = document.getElementById('emptyState');
+  const q = App.searchQuery.toLowerCase().trim();
+  const f = App.activeFilter;
+
+  const filtered = POSTS.filter(p => {
+    // status/location filter
+    const statusMatch = f === 'all' || p.status === f || p.location.toLowerCase().includes(f);
+    // search
+    const searchMatch = !q || [p.title, p.desc, p.location, p.category, p.owner].some(s => s.toLowerCase().includes(q));
+    return statusMatch && searchMatch;
+  });
+
+  if (filtered.length === 0) {
+    feed.innerHTML = '';
+    empty.classList.add('visible');
+  } else {
+    empty.classList.remove('visible');
+    feed.innerHTML = filtered.map(buildCard).join('');
+  }
+}
+
+// ── SEARCH ──
+function initSearch() {
+  const input = document.getElementById('searchInput');
+  const clearBtn = document.getElementById('searchClear');
+  input.addEventListener('input', () => {
+    App.searchQuery = input.value;
+    clearBtn.classList.toggle('visible', input.value.length > 0);
+    renderFeed();
+  });
+  clearBtn.addEventListener('click', () => {
+    input.value = '';
+    App.searchQuery = '';
+    clearBtn.classList.remove('visible');
+    renderFeed();
+    input.focus();
+  });
+}
+
+// ── FILTERS ──
+function initFilters() {
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      App.activeFilter = chip.dataset.filter;
+      renderFeed();
+    });
+  });
+}
+
+// ── THREE-DOT CARD MENU ──
+let openMenuId = null;
+function toggleCardMenu(e, postId) {
+  e.stopPropagation();
+  if (openMenuId && openMenuId !== postId) closeCardMenu(openMenuId);
+  const menu = document.getElementById('menu-' + postId);
+  if (!menu) return;
+  const isOpen = menu.classList.contains('open');
+  menu.classList.toggle('open', !isOpen);
+  openMenuId = isOpen ? null : postId;
+}
+function closeCardMenu(postId) {
+  const menu = document.getElementById('menu-' + postId);
+  if (menu) menu.classList.remove('open');
+  if (openMenuId === postId) openMenuId = null;
+}
+document.addEventListener('click', () => {
+  if (openMenuId) closeCardMenu(openMenuId);
+});
+
+// ── MENU (hamburger) ──
+function toggleMenu() { document.getElementById('menuDropdown').classList.toggle('open'); }
+document.addEventListener('click', e => {
+  if (!e.target.closest('.menu-btn') && !e.target.closest('.menu-dropdown'))
+    document.getElementById('menuDropdown').classList.remove('open');
+});
+function goHome() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function signOut() {
+  App.isLoggedIn = false; App.isAdmin = false;
+  toggleMenu(); updateMenuState(); renderFeed(); showToast('Signed out');
+}
+function openOwnProfile() {
+  toggleMenu();
+  openProfile(App.currentUser.name, App.currentUser.initials, App.currentUser.color, App.currentUser.uid);
+}
+
+function updateMenuState() {
+  document.getElementById('menuNotLoggedIn').style.display = App.isLoggedIn ? 'none' : '';
+  document.getElementById('menuLoggedIn').style.display = App.isLoggedIn ? '' : 'none';
+  if (App.isLoggedIn) {
+    document.getElementById('menuAvatarSm').style.background = App.currentUser.color;
+    document.getElementById('menuAvatarSm').textContent = App.currentUser.initials;
+    document.getElementById('menuUserName').textContent = App.currentUser.name;
+    document.getElementById('menuUserHandle').textContent = 'u/' + App.currentUser.uid;
+    document.getElementById('adminMenuItem').style.display = App.isAdmin ? '' : 'none';
+  }
+}
+
+// ── COMMENTS ──
+function openComments(title) {
+  document.getElementById('panelTitle').textContent = title;
+  document.getElementById('commentsPanel').classList.add('open');
+  document.getElementById('overlay').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
+function closeComments() {
+  document.getElementById('commentsPanel').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+  document.body.style.overflow = '';
+}
+function toggleReply(btn) {
+  const body = btn.closest('.comment-body');
+  const form = body.querySelector('.reply-form');
+  const user = body.querySelector('.comment-user').textContent;
+  if (!form.innerHTML.trim())
+    form.innerHTML = `<input class="reply-input" placeholder="Reply to ${user}…"><button class="reply-send" onclick="submitReply(this)">Send</button>`;
+  form.classList.toggle('visible');
+  if (form.classList.contains('visible')) form.querySelector('.reply-input').focus();
+}
+function submitReply(btn) {
+  const form = btn.closest('.reply-form');
+  const input = form.querySelector('.reply-input');
+  if (!input.value.trim()) return;
+  const replies = form.closest('.comment-body').querySelector('.replies');
+  const div = document.createElement('div');
+  div.className = 'reply';
+  div.innerHTML = `<div class="reply-avatar" style="background:var(--accent)">Me</div><div class="reply-body"><div class="comment-user">u/me</div><div class="comment-text" style="font-size:12px;color:#b0b6c5">${input.value}</div></div>`;
+  replies.appendChild(div); input.value = ''; form.classList.remove('visible');
+}
+function submitCommentClick() {
+  const input = document.getElementById('commentInput');
+  if (!input.value.trim()) return;
+  const scroll = document.getElementById('commentsScroll');
+  const div = document.createElement('div');
+  div.className = 'comment';
+  div.innerHTML = `<div class="comment-avatar" style="background:var(--accent)">Me</div><div class="comment-body"><div class="comment-user">u/me</div><div class="comment-text">${input.value}</div><div class="comment-meta"><span class="comment-time">just now</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div><div class="reply-form"></div><div class="replies"></div></div>`;
+  scroll.appendChild(div); input.value = ''; scroll.scrollTop = scroll.scrollHeight;
+}
+
+// ── PROFILE ──
+let cur = {};
+const pts = [320, 480, 640, 750, 840, 910, 1200, 1450];
+function openProfile(name, initials, color, uid) {
+  cur = { color, name: name + ' B.', initials, uid };
+  document.getElementById('pAvatar').style.background = color;
+  document.getElementById('pAvatar').textContent = initials;
+  document.getElementById('pName').textContent = name + ' B.';
+  document.getElementById('pHandle').textContent = 'u/' + uid;
+  document.getElementById('pPoints').textContent = pts[Math.floor(Math.random() * pts.length)] + ' points';
+  document.getElementById('profileMsgBtn').style.display =
+    (App.isLoggedIn && uid === App.currentUser.uid) ? 'none' : 'inline-flex';
+  openSheet('profileSheet', 'profileOverlay');
+}
+function closeProfile() { closeSheet('profileSheet', 'profileOverlay'); }
+
+function openSheet(sheetId, overlayId) {
+  document.getElementById(sheetId).classList.add('open');
+  if (overlayId) document.getElementById(overlayId).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeSheet(sheetId, overlayId) {
+  document.getElementById(sheetId).classList.remove('open');
+  if (overlayId) document.getElementById(overlayId).classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ── HISTORY ITEM ──
+function openHistoryItem(title, desc, status, location, date, category) {
+  document.getElementById('hTitle').textContent = title;
+  document.getElementById('hDesc').textContent = desc;
+  document.getElementById('hDate').textContent = date;
+  document.getElementById('hLocation').textContent = location;
+  document.getElementById('hCategory').textContent = category;
+  const sb = document.getElementById('hStatus');
+  sb.textContent = statusLabel(status.toLowerCase());
+  sb.className = 'status-badge ' + statusClass(status.toLowerCase());
+  openSheet('historySheet');
+}
+function closeHistoryItem() { closeSheet('historySheet'); document.body.style.overflow = 'hidden'; }
+
+// ── DM ──
+function openDM() {
+  closeProfile();
+  document.getElementById('dmAvatar').style.background = cur.color;
+  document.getElementById('dmAvatar').textContent = cur.initials;
+  document.getElementById('dmName').textContent = cur.name;
+  setTimeout(() => { document.getElementById('dmSheet').classList.add('open'); document.body.style.overflow = 'hidden'; }, 160);
+}
+function closeDM() { document.getElementById('dmSheet').classList.remove('open'); document.body.style.overflow = ''; }
+function sendDMClick() {
+  const input = document.getElementById('dmInput');
+  if (!input.value.trim()) return;
+  const msgs = document.getElementById('dmMessages');
+  const div = document.createElement('div');
+  div.className = 'dm-msg me'; div.textContent = input.value;
+  msgs.appendChild(div); input.value = ''; msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ── LOCATION MODAL ──
+function openLocation(name) {
+  const locSheet = document.getElementById('locSheet');
+  document.getElementById('locTitle').textContent = name;
+  const related = (LOCATIONS[name] || []).map(id => POSTS.find(p => p.id === id)).filter(Boolean);
+  document.getElementById('locCount').textContent = related.length + ' item' + (related.length !== 1 ? 's' : '') + ' reported here';
+  const listEl = document.getElementById('locList');
+  listEl.innerHTML = related.map(p => `
+    <div class="loc-card">
+      <div class="loc-card-head">
+        <div class="card-avatar" style="background:${p.ownerColor};width:26px;height:26px;font-size:9px;flex-shrink:0">${p.ownerInitials}</div>
+        <div class="loc-card-meta"><span class="lc-loc">${p.location}</span><span class="lc-uid">u/${p.owner}</span></div>
+        <span class="status-badge ${statusClass(p.status)}" style="font-size:10px;padding:2px 7px">${statusLabel(p.status)}</span>
+      </div>
+      <div class="loc-card-title">${p.title}</div>
+      <div class="loc-card-desc">${p.desc.substring(0, 80)}…</div>
+    </div>`).join('');
+  openSheet('locSheet', 'locOverlay');
+}
+function closeLocation() { closeSheet('locSheet', 'locOverlay'); }
+
+// ── POST ──
+function tryPost() {
+  if (!App.isLoggedIn) {
+    document.getElementById('signinReqModal').classList.add('open');
+    document.body.style.overflow = 'hidden'; return;
+  }
+  document.getElementById('postModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closePost() { document.getElementById('postModal').classList.remove('open'); document.body.style.overflow = ''; }
+function closeSigninReq() { document.getElementById('signinReqModal').classList.remove('open'); document.body.style.overflow = ''; }
+
+// ── EDIT ──
+let editingPostId = null, editSelectedStatus = null;
+function openEdit(postId) {
+  editingPostId = postId;
+  editSelectedStatus = null;
+  document.querySelectorAll('.status-opt').forEach(o => o.className = 'status-opt');
+  const post = POSTS.find(p => p.id === postId);
+  if (!post) return;
+  document.getElementById('editTitle').value = post.title;
+  document.getElementById('editDesc').value = post.desc;
+  // pre-select current status
+  const cur = document.querySelector(`.status-opt[data-status="${post.status}"]`);
+  if (cur) { cur.classList.add('sel-' + post.status); editSelectedStatus = post.status; }
+  document.getElementById('editModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeEdit() { document.getElementById('editModal').classList.remove('open'); document.body.style.overflow = ''; }
+function selectStatus(el, status) {
+  document.querySelectorAll('.status-opt').forEach(o => o.className = 'status-opt');
+  el.classList.add('sel-' + status); editSelectedStatus = status;
+}
+function saveEdit() {
+  if (!editingPostId) return;
+  const post = POSTS.find(p => p.id === editingPostId);
+  if (!post) return;
+  const newTitle = document.getElementById('editTitle').value.trim();
+  const newDesc = document.getElementById('editDesc').value.trim();
+  if (newTitle) post.title = newTitle;
+  if (newDesc) post.desc = newDesc;
+  if (editSelectedStatus) post.status = editSelectedStatus;
+  closeEdit();
+  renderFeed();
+  showToast('Post updated');
+}
+
+// ── DELETE ──
+let deletingPostId = null;
+function openConfirm(postId) {
+  deletingPostId = postId;
+  document.getElementById('confirmModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeConfirm() { document.getElementById('confirmModal').classList.remove('open'); document.body.style.overflow = ''; }
+function confirmDelete() {
+  if (deletingPostId) {
+    const idx = POSTS.findIndex(p => p.id === deletingPostId);
+    if (idx > -1) POSTS.splice(idx, 1);
+  }
+  closeConfirm();
+  renderFeed();
+  showToast('Post deleted');
+}
+
+// ── ADMIN ──
+function openAdminPanel() {
+  toggleMenu();
+  document.getElementById('adminModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeAdmin() { document.getElementById('adminModal').classList.remove('open'); document.body.style.overflow = ''; }
+function adminAction(type) {
+  const msgs = { delete: 'Post deleted.', ban: 'Member banned.', unban: 'Member unbanned.', alert: 'Alert sent to member.' };
+  closeAdmin(); showToast(msgs[type] || 'Done');
+}
+
+// ── LOGIN ──
+function openLogin() {
+  toggleMenu();
+  document.getElementById('loginFormWrap').style.display = '';
+  document.getElementById('loginSent').style.display = 'none';
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginEmail').style.borderColor = '';
+  document.getElementById('loginModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeLogin() { document.getElementById('loginModal').classList.remove('open'); document.body.style.overflow = ''; }
+function sendMagicLink() {
+  const email = document.getElementById('loginEmail').value.trim();
+  if (!email || !email.includes('@')) {
+    document.getElementById('loginEmail').style.borderColor = 'rgba(224,90,90,0.5)';
+    document.getElementById('loginEmail').focus(); return;
+  }
+  document.getElementById('loginFormWrap').style.display = 'none';
+  document.getElementById('loginSent').style.display = 'block';
+  document.getElementById('loginSentMsg').innerHTML = `We sent a sign-in link to<br><strong>${email}</strong><br><br>Click it to log in — no password required.`;
+  setTimeout(() => {
+    App.isLoggedIn = true;
+    closeLogin();
+    updateMenuState();
+    renderFeed();
+    showToast('Signed in as ' + email.split('@')[0]);
+  }, 1500);
+}
+function contactAdmin() {
+  window.location.href = 'mailto:admin@findit.campus?subject=Admin%20Access%20Request&body=Hello%2C%20I%20would%20like%20to%20request%20admin%20rights%20for%20FindIt.%0A%0AName%3A%20%0ARole%3A%20%0AReason%3A%20';
+}
+
+// ── SHARE ──
+function shareItem(btn) {
+  const orig = btn.innerHTML;
+  navigator.clipboard?.writeText(window.location.href);
+  btn.textContent = 'Copied';
+  setTimeout(() => btn.innerHTML = orig, 1600);
+}
+
+// ── TOAST ──
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── INIT ──
+document.addEventListener('DOMContentLoaded', () => {
+  // Simulate logged in as amir_b for demo — comment out to start logged out
+  App.isLoggedIn = true;
+  updateMenuState();
+  initSearch();
+  initFilters();
+  renderFeed();
+});
+
+</script>
+</body>
+</html>
