@@ -29,14 +29,25 @@ const sb = (() => {
 
     // ── AUTH ──────────────────────────────────────────────────────────────────
     async function sendMagicLink(email) {
-        return api('/auth/v1/otp', {
-            method: 'POST',
-            body: JSON.stringify({
-                email,
-                create_user: true,
-                options: { emailRedirectTo: window.location.origin + window.location.pathname },
-            }),
-        });
+        try {
+            console.log('Sending OTP to:', email, 'URL:', SUPABASE_URL);
+            const r = await fetch(`${SUPABASE_URL}/auth/v1/otp`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    apikey: SUPABASE_ANON,
+                    Authorization: `Bearer ${SUPABASE_ANON}`,
+                },
+                body: JSON.stringify({ email, create_user: true }),
+            });
+            const text = await r.text();
+            console.log('OTP response status:', r.status, 'body:', text);
+            if (!r.ok) return null;
+            return true;
+        } catch(e) {
+            console.error('sendMagicLink fetch error:', e);
+            return null;
+        }
     }
 
     async function handleCallback() {
