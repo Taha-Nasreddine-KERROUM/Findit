@@ -1,19 +1,14 @@
-// ============================================================
-//  FindIt – Main App
-//  Works in two modes:
-//   • DEMO MODE  (USE_SUPABASE = false) — all data is local, no backend needed
-//   • LIVE MODE  (USE_SUPABASE = true)  — reads/writes from Supabase
-// ============================================================
-const USE_SUPABASE = true; // flip to true once you've set up Supabase
+const USE_SUPABASE = true;
 
 // ── APP STATE ─────────────────────────────────────────────────────────────────
 const App = {
-    isLoggedIn: false,
-    isAdmin: false,
-    isSuperAdmin: false,
-    currentUser: null,   // { id, uid, name, initials, color, role }
-    activeFilter: 'all',
-    searchQuery: '',
+    isLoggedIn:    false,
+    isAdmin:       false,
+    isSuperAdmin:  false,
+    currentUser:   null,
+    activeFilter:  'all',
+    searchQuery:   '',
+    openPostId:    null,  // which post's comments panel is open
 };
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
@@ -25,7 +20,6 @@ const App = {
             const restored = await sb.restoreSession();
             if (restored) setUser(restored);
         }
-        // Load all real posts from Supabase
         const rows = await sb.getPosts();
         POSTS = (rows || []).filter(r => !r.is_deleted).map(mapRow);
     }
@@ -35,33 +29,32 @@ const App = {
     renderFeed();
 })();
 
-// Map a Supabase posts_with_author row to a card-compatible object
+// ── MAP SUPABASE ROW → CARD OBJECT ────────────────────────────────────────────
 function mapRow(r) {
     const d = new Date(r.created_at);
     const dateStr = d.toLocaleDateString('en-GB', {day:'numeric', month:'short'});
     return {
         id:            r.id,
-        // view uses author_* prefix — fall back for locally-constructed objects
-        owner:         r.author_uid      || r.owner_uid  || r.uid || '',
-        ownerName:     r.author_name     || r.owner_name || r.name || '',
-        ownerInitials: r.author_initials || r.owner_initials || r.initials || '?',
-        ownerColor:    r.author_color    || r.owner_color || r.color || '#5b8dff',
-        title:         r.title || '',
+        owner:         r.author_uid      || r.uid || '',
+        ownerName:     r.author_name     || r.name || '',
+        ownerInitials: r.author_initials || r.initials || '?',
+        ownerColor:    r.author_color    || r.color || '#5b8dff',
+        ownerId:       r.author_id       || '',
+        title:         r.title       || '',
         desc:          r.description || '',
-        location:      r.location || '',
-        category:      r.category || '',
-        status:        r.status || 'found',
+        location:      r.location    || '',
+        category:      r.category    || '',
+        status:        r.status      || 'found',
         date:          dateStr,
         comments:      Number(r.comment_count) || 0,
         hasImage:      !!r.image_url,
-        imgEmoji:      '',
-        imgClass:      '',
         _imageUrl:     r.image_url || null,
     };
 }
+
 function setUser(me) {
-    App.isLoggedIn = true;
-    App.currentUser = {
+    App.isLoggedIn   = true;
+    App.currentUser  = {
         id:       me.profile.id,
         uid:      me.profile.uid,
         name:     me.profile.name,
@@ -85,25 +78,30 @@ function buildCard(post) {
     const isOwner = App.isLoggedIn && (post.owner === App.currentUser?.uid || App.isAdmin);
     let imgHtml = '';
     if (post._imageUrl) {
-        imgHtml = `<div class="card-image"><img src="${post._imageUrl}" style="width:100%;border-radius:8px;display:block;height:auto"></div>`;
-    } else if (post.hasImage) {
-        imgHtml = `<div class="card-image"><div class="img-placeholder ${post.imgClass}">${post.imgEmoji}</div></div>`;
+        imgHtml = `<div class="card-image"><img src="${post._imageUrl}" style="width:100%;display:block;height:auto;border-radius:0"></div>`;
     }
 
     const dotsMenu = isOwner ? `
     <div class="card-menu" id="menu-${post.id}">
-      <div class="card-menu-item" onclick="openEdit(${post.id});closeCardMenu(${post.id})">
+      <div class="card-menu-item" onclick="openEdit('${post.id}');closeCardMenu('${post.id}')">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Edit post
       </div>
       <div class="card-menu-sep"></div>
-      <div class="card-menu-item danger" onclick="openConfirm(${post.id});closeCardMenu(${post.id})">
+      <div class="card-menu-item danger" onclick="openConfirm('${post.id}');closeCardMenu('${post.id}')">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
         Delete post
       </div>
     </div>` : '';
     const dotsBtn = isOwner
-        ? `<button class="dots-btn" onclick="toggleCardMenu(event,${post.id})" title="More options">•••</button>` : '';
+        ? `<button class="dots-btn" onclick="toggleCardMenu(event,'${post.id}')" title="More options">•••</button>` : '';
+
+    // Escape for safe use in onclick strings
+    const safeOwnerName     = post.ownerName.replace(/'/g, "\\'");
+    const safeOwnerInitials = post.ownerInitials.replace(/'/g, "\\'");
+    const safeOwnerColor    = post.ownerColor.replace(/'/g, "\\'");
+    const safeOwner         = post.owner.replace(/'/g, "\\'");
+    const safeLocation      = post.location.replace(/'/g, "\\'");
 
     return `
   <div class="card" data-post="${post.id}" data-owner="${post.owner}"
@@ -113,16 +111,16 @@ function buildCard(post) {
     <div class="card-inner">
       <div class="card-header">
         <div class="card-avatar" style="background:${post.ownerColor}"
-             onclick="openProfile('${post.ownerName}','${post.ownerInitials}','${post.ownerColor}','${post.owner}')">${post.ownerInitials}</div>
+             onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">${post.ownerInitials}</div>
         <div class="card-meta">
-          <span class="location-tag" onclick="openLocation('${post.location}')">${post.location}</span>
-          <span class="username" onclick="openProfile('${post.ownerName}','${post.ownerInitials}','${post.ownerColor}','${post.owner}')">u/${post.owner}</span>
+          <span class="location-tag" onclick="openLocation('${safeLocation}')">${post.location}</span>
+          <span class="username" onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">u/${post.owner}</span>
         </div>
         <div class="card-right">
           <div class="card-status-row">
             <span class="card-category">${post.category}</span>
             <span class="card-date">${post.date}</span>
-            <span class="status-badge ${statusClass(post.status)}" id="status-card-${post.id}">${statusLabel(post.status)}</span>
+            <span class="status-badge ${statusClass(post.status)}">${statusLabel(post.status)}</span>
           </div>
         </div>
       </div>
@@ -130,9 +128,9 @@ function buildCard(post) {
       <div class="card-desc">${post.desc}</div>
       ${imgHtml}
       <div class="card-actions">
-        <button class="action-btn" onclick="openComments('${post.title.substring(0,30)}…')">
+        <button class="action-btn" onclick="openComments('${post.id}')">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          ${post.comments} comment${post.comments!==1?'s':''}
+          <span id="comment-count-${post.id}">${post.comments}</span> comment${post.comments!==1?'s':''}
         </button>
         <div class="spacer"></div>
         ${dotsBtn}
@@ -221,7 +219,7 @@ async function signOut() {
 function openOwnProfile() {
     toggleMenu();
     const u = App.currentUser;
-    if (u) openProfile(u.name, u.initials, u.color, u.uid);
+    if (u) openProfile(u.name, u.initials, u.color, u.uid, u.id);
 }
 
 function updateMenuState() {
@@ -237,137 +235,280 @@ function updateMenuState() {
 }
 
 // ── COMMENTS ──────────────────────────────────────────────────────────────────
-function openComments(title) {
-    document.getElementById('panelTitle').textContent = title;
+async function openComments(postId) {
+    App.openPostId = postId;
+    const post = POSTS.find(p => p.id === postId);
+    document.getElementById('panelTitle').textContent = post ? post.title : 'Comments';
+    document.getElementById('commentsScroll').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading…</div>';
     document.getElementById('commentsPanel').classList.add('open');
     document.getElementById('overlay').classList.add('show');
     document.body.style.overflow='hidden';
+
+    // Update comment input visibility based on login state
+    const inputWrap = document.getElementById('commentInputWrap');
+    const loginPrompt = document.getElementById('commentLoginPrompt');
+    if (App.isLoggedIn) {
+        inputWrap.style.display='';
+        loginPrompt.style.display='none';
+    } else {
+        inputWrap.style.display='none';
+        loginPrompt.style.display='';
+    }
+
+    if (USE_SUPABASE) {
+        const comments = await sb.getComments(postId);
+        renderComments(comments || []);
+    } else {
+        renderComments([]);
+    }
 }
+
+function renderComments(comments) {
+    const scroll = document.getElementById('commentsScroll');
+    if (!comments.length) {
+        scroll.innerHTML = '<div style="text-align:center;padding:30px 20px;color:var(--muted);font-size:13px">No comments yet. Be the first!</div>';
+        return;
+    }
+    // Only top-level (no parent)
+    const top = comments.filter(c => !c.parent_id);
+    const byParent = {};
+    comments.filter(c => c.parent_id).forEach(c => {
+        (byParent[c.parent_id] = byParent[c.parent_id] || []).push(c);
+    });
+
+    scroll.innerHTML = top.map(c => buildCommentHtml(c, byParent)).join('');
+}
+
+function buildCommentHtml(c, byParent) {
+    const author   = c.author || {};
+    const initials = author.initials || '?';
+    const uid      = author.uid      || 'user';
+    const color    = author.color    || '#5b8dff';
+    const name     = author.name     || uid;
+    const time     = timeAgo(new Date(c.created_at));
+    const replies  = (byParent[c.id] || []).map(r => buildCommentHtml(r, byParent)).join('');
+
+    return `
+    <div class="comment" data-comment-id="${c.id}">
+      <div class="comment-avatar" style="background:${color}">${initials}</div>
+      <div class="comment-body">
+        <div class="comment-user">u/${uid}</div>
+        <div class="comment-text">${escHtml(c.body)}</div>
+        <div class="comment-meta">
+          <span class="comment-time">${time}</span>
+          ${App.isLoggedIn ? `<button class="reply-btn" onclick="toggleReply(this,'${c.id}')">Reply</button>` : ''}
+        </div>
+        <div class="reply-form" id="reply-form-${c.id}" style="display:none"></div>
+        <div class="replies">${replies}</div>
+      </div>
+    </div>`;
+}
+
+function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function timeAgo(date) {
+    const s = Math.floor((Date.now() - date) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s/60) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago';
+    return Math.floor(s/86400) + 'd ago';
+}
+
 function closeComments() {
     document.getElementById('commentsPanel').classList.remove('open');
     document.getElementById('overlay').classList.remove('show');
     document.body.style.overflow='';
+    App.openPostId = null;
 }
-function toggleReply(btn) {
-    const body=btn.closest('.comment-body');
-    const form=body.querySelector('.reply-form');
-    const user=body.querySelector('.comment-user').textContent;
-    if (!form.innerHTML.trim()) form.innerHTML=`<input class="reply-input" placeholder="Reply to ${user}…"><button class="reply-send" onclick="submitReply(this)">Send</button>`;
-    form.classList.toggle('visible');
-    if (form.classList.contains('visible')) form.querySelector('.reply-input').focus();
+
+function toggleReply(btn, parentId) {
+    const formEl = document.getElementById('reply-form-'+parentId);
+    if (!formEl) return;
+    if (formEl.innerHTML.trim()) {
+        formEl.style.display = formEl.style.display === 'none' ? 'flex' : 'none';
+    } else {
+        formEl.style.display='flex';
+        formEl.innerHTML=`<input class="reply-input" placeholder="Write a reply…" id="reply-input-${parentId}"><button class="reply-send" onclick="submitReply('${parentId}')">Send</button>`;
+        document.getElementById('reply-input-'+parentId).focus();
+    }
 }
-function submitReply(btn) {
-    const form=btn.closest('.reply-form');
-    const input=form.querySelector('.reply-input');
-    if (!input.value.trim()) return;
-    const replies=form.closest('.comment-body').querySelector('.replies');
-    const div=document.createElement('div'); div.className='reply';
-    div.innerHTML=`<div class="reply-avatar" style="background:var(--accent)">Me</div><div class="reply-body"><div class="comment-user">u/me</div><div class="comment-text" style="font-size:12px;color:#b0b6c5">${input.value}</div></div>`;
-    replies.appendChild(div); input.value=''; form.classList.remove('visible');
+
+async function submitReply(parentId) {
+    if (!App.isLoggedIn) { showToast('Sign in to reply'); return; }
+    const input = document.getElementById('reply-input-'+parentId);
+    const body  = input?.value.trim();
+    if (!body) return;
+    input.value = '';
+    if (USE_SUPABASE) {
+        await sb.createComment(App.openPostId, body, parentId);
+        // Reload comments
+        const comments = await sb.getComments(App.openPostId);
+        renderComments(comments || []);
+    }
 }
-function submitCommentClick() {
-    const input=document.getElementById('commentInput');
-    if (!input.value.trim()) return;
-    const scroll=document.getElementById('commentsScroll');
-    const div=document.createElement('div'); div.className='comment';
-    div.innerHTML=`<div class="comment-avatar" style="background:var(--accent)">Me</div><div class="comment-body"><div class="comment-user">u/me</div><div class="comment-text">${input.value}</div><div class="comment-meta"><span class="comment-time">just now</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div><div class="reply-form"></div><div class="replies"></div></div>`;
-    scroll.appendChild(div); input.value=''; scroll.scrollTop=scroll.scrollHeight;
+
+async function submitCommentClick() {
+    if (!App.isLoggedIn) { showToast('Sign in to comment'); return; }
+    const input = document.getElementById('commentInput');
+    const body  = input.value.trim();
+    if (!body || !App.openPostId) return;
+    input.value = '';
+
+    if (USE_SUPABASE) {
+        await sb.createComment(App.openPostId, body);
+        const comments = await sb.getComments(App.openPostId);
+        renderComments(comments || []);
+        // Update comment count on card
+        const post = POSTS.find(p => p.id === App.openPostId);
+        if (post) {
+            post.comments = (post.comments || 0) + 1;
+            const el = document.getElementById('comment-count-'+App.openPostId);
+            if (el) el.textContent = post.comments;
+        }
+    }
 }
 
 // ── PROFILE ───────────────────────────────────────────────────────────────────
-let cur={};
-const pts=[320,480,640,750,840,910,1200,1450];
-function openProfile(name,initials,color,uid) {
-    cur={color,name:name+' B.',initials,uid};
-    document.getElementById('pAvatar').style.background=color;
-    document.getElementById('pAvatar').textContent=initials;
-    document.getElementById('pName').textContent=name+' B.';
-    document.getElementById('pHandle').textContent='u/'+uid;
-    document.getElementById('pPoints').textContent=pts[Math.floor(Math.random()*pts.length)]+' points';
-    document.getElementById('profileMsgBtn').style.display=
-        (App.isLoggedIn && uid===App.currentUser?.uid) ? 'none' : 'inline-flex';
+let curProfile = {};
+
+async function openProfile(name, initials, color, uid, profileId) {
+    curProfile = { color, name, initials, uid, profileId };
+    document.getElementById('pAvatar').style.background = color;
+    document.getElementById('pAvatar').textContent      = initials;
+    document.getElementById('pName').textContent        = name;
+    document.getElementById('pHandle').textContent      = 'u/' + uid;
+    document.getElementById('pPoints').textContent      = '…';
+    document.getElementById('pStatPosted').textContent  = '…';
+    document.getElementById('pStatReturned').textContent= '…';
+    document.getElementById('profileMsgBtn').style.display =
+        (App.isLoggedIn && uid === App.currentUser?.uid) ? 'none' : 'inline-flex';
+    document.getElementById('profileHistoryList').innerHTML =
+        '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading…</div>';
     openSheet('profileSheet','profileOverlay');
+
+    if (!USE_SUPABASE || !profileId) return;
+
+    // Load real stats + posts in parallel
+    const [stats, posts] = await Promise.all([
+        sb.getProfileStats(profileId),
+        sb.getPostsByUser(profileId),
+    ]);
+
+    document.getElementById('pPoints').textContent       = stats.points + ' points';
+    document.getElementById('pStatPosted').textContent   = stats.postCount;
+    document.getElementById('pStatReturned').textContent = posts.filter(p => p.status === 'recovered').length;
+
+    const list = document.getElementById('profileHistoryList');
+    if (!posts.length) {
+        list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No posts yet</div>';
+        return;
+    }
+    list.innerHTML = posts.map(r => {
+        const p = mapRow(r);
+        const badgeColor = p.status === 'found' ? 'rgba(34,201,122,0.1)' :
+                           p.status === 'lost'  ? 'rgba(77,166,255,0.1)' :
+                           p.status === 'recovered' ? 'rgba(232,168,56,0.1)' : 'rgba(138,143,158,0.1)';
+        const badgeText  = p.status === 'found' ? 'var(--found)' :
+                           p.status === 'lost'  ? 'var(--lost)'  :
+                           p.status === 'recovered' ? 'var(--recovered)' : 'var(--waiting)';
+        const badgeBorder= p.status === 'found' ? 'rgba(34,201,122,0.18)' :
+                           p.status === 'lost'  ? 'rgba(77,166,255,0.18)' :
+                           p.status === 'recovered' ? 'rgba(232,168,56,0.2)' : 'rgba(138,143,158,0.18)';
+        return `
+        <div class="activity-item" onclick="closeProfile();scrollToPost('${p.id}')">
+          <span class="act-badge" style="background:${badgeColor};color:${badgeText};border:1px solid ${badgeBorder}">${statusLabel(p.status)}</span>
+          <span style="font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.title)}</span>
+          <span style="font-size:11px;color:var(--muted);flex-shrink:0">${p.date}</span>
+          <svg width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px;flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>`;
+    }).join('');
 }
+
+// Scroll to a post in the feed and highlight it
+function scrollToPost(postId) {
+    // Make sure it's in the feed (reset filters if needed)
+    if (App.activeFilter !== 'all' || App.searchQuery) {
+        App.activeFilter = 'all';
+        App.searchQuery  = '';
+        document.getElementById('searchInput').value = '';
+        document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
+        document.querySelector('.filter-chip[data-filter="all"]').classList.add('active');
+        renderFeed();
+    }
+    const el = document.querySelector(`[data-post="${postId}"]`);
+    if (el) {
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        el.classList.add('card-highlight');
+        setTimeout(() => el.classList.remove('card-highlight'), 2000);
+    }
+}
+
 function closeProfile() { closeSheet('profileSheet','profileOverlay'); }
 
-function openSheet(id,overlayId) {
+function openSheet(id, overlayId) {
     document.getElementById(id).classList.add('open');
     if (overlayId) document.getElementById(overlayId).classList.add('open');
     document.body.style.overflow='hidden';
 }
-function closeSheet(id,overlayId) {
+function closeSheet(id, overlayId) {
     document.getElementById(id).classList.remove('open');
     if (overlayId) document.getElementById(overlayId).classList.remove('open');
     document.body.style.overflow='';
 }
 
-function openHistoryItem(title,desc,status,location,date,category) {
-    document.getElementById('hTitle').textContent=title;
-    document.getElementById('hDesc').textContent=desc;
-    document.getElementById('hDate').textContent=date;
-    document.getElementById('hLocation').textContent=location;
-    document.getElementById('hCategory').textContent=category;
-    const sb2=document.getElementById('hStatus');
-    sb2.textContent=statusLabel(status); sb2.className='status-badge '+statusClass(status);
-    openSheet('historySheet');
-}
-function closeHistoryItem() { closeSheet('historySheet'); document.body.style.overflow='hidden'; }
-
 // ── DM ────────────────────────────────────────────────────────────────────────
 function openDM() {
     closeProfile();
-    document.getElementById('dmAvatar').style.background=cur.color;
-    document.getElementById('dmAvatar').textContent=cur.initials;
-    document.getElementById('dmName').textContent=cur.name;
-    setTimeout(()=>{document.getElementById('dmSheet').classList.add('open');document.body.style.overflow='hidden';},160);
+    document.getElementById('dmAvatar').style.background = curProfile.color;
+    document.getElementById('dmAvatar').textContent      = curProfile.initials;
+    document.getElementById('dmName').textContent        = curProfile.name;
+    setTimeout(()=>{document.getElementById('dmSheet').classList.add('open'); document.body.style.overflow='hidden';},160);
 }
 function closeDM() { document.getElementById('dmSheet').classList.remove('open'); document.body.style.overflow=''; }
 function sendDMClick() {
-    const input=document.getElementById('dmInput');
+    const input = document.getElementById('dmInput');
     if (!input.value.trim()) return;
-    const msgs=document.getElementById('dmMessages');
-    const div=document.createElement('div'); div.className='dm-msg me'; div.textContent=input.value;
+    const msgs = document.getElementById('dmMessages');
+    const div  = document.createElement('div'); div.className='dm-msg me'; div.textContent=input.value;
     msgs.appendChild(div); input.value=''; msgs.scrollTop=msgs.scrollHeight;
 }
 
 // ── LOCATION ──────────────────────────────────────────────────────────────────
 function openLocation(name) {
-    document.getElementById('locTitle').textContent=name;
-    const related=(LOCATIONS[name]||[]).map(id=>POSTS.find(p=>p.id===id)).filter(Boolean);
-    document.getElementById('locCount').textContent=related.length+' item'+(related.length!==1?'s':'')+' reported here';
-    document.getElementById('locList').innerHTML=related.map(p=>`
-    <div class="loc-card">
+    document.getElementById('locTitle').textContent = name;
+    const related = POSTS.filter(p => p.location.toLowerCase() === name.toLowerCase());
+    document.getElementById('locCount').textContent = related.length+' item'+(related.length!==1?'s':'')+' reported here';
+    document.getElementById('locList').innerHTML = related.map(p=>`
+    <div class="loc-card" onclick="closeLocation();scrollToPost('${p.id}')">
       <div class="loc-card-head">
         <div class="card-avatar" style="background:${p.ownerColor};width:26px;height:26px;font-size:9px;flex-shrink:0">${p.ownerInitials}</div>
         <div class="loc-card-meta"><span class="lc-loc">${p.location}</span><span class="lc-uid">u/${p.owner}</span></div>
         <span class="status-badge ${statusClass(p.status)}" style="font-size:10px;padding:2px 7px">${statusLabel(p.status)}</span>
       </div>
-      <div class="loc-card-title">${p.title}</div>
-      <div class="loc-card-desc">${p.desc.substring(0,80)}…</div>
+      <div class="loc-card-title">${escHtml(p.title)}</div>
+      <div class="loc-card-desc">${escHtml(p.desc.substring(0,80))}…</div>
     </div>`).join('');
     openSheet('locSheet','locOverlay');
 }
 function closeLocation() { closeSheet('locSheet','locOverlay'); }
 
 // ── POST ──────────────────────────────────────────────────────────────────────
-let postImageDataUrl = null; // holds base64 image chosen by user
+let postImageDataUrl = null;
 
 function tryPost() {
     if (!App.isLoggedIn) {
         document.getElementById('signinReqModal').classList.add('open');
         document.body.style.overflow='hidden'; return;
     }
-    // reset form
     document.getElementById('postTitle').value='';
     document.getElementById('postDesc').value='';
     clearImage();
     document.getElementById('postModal').classList.add('open');
     document.body.style.overflow='hidden';
 }
-function closePost() {
-    document.getElementById('postModal').classList.remove('open');
-    document.body.style.overflow='';
-}
+function closePost() { document.getElementById('postModal').classList.remove('open'); document.body.style.overflow=''; }
 function closeSigninReq() { document.getElementById('signinReqModal').classList.remove('open'); document.body.style.overflow=''; }
 
 // ── IMAGE HELPERS ─────────────────────────────────────────────────────────────
@@ -397,16 +538,12 @@ function clearImage() {
     document.getElementById('postImageInput').value='';
 }
 
-// Listen for paste anywhere on the page (when post modal is open)
 document.addEventListener('paste', e => {
     if (!document.getElementById('postModal').classList.contains('open')) return;
     const items = e.clipboardData?.items;
     if (!items) return;
     for (const item of items) {
-        if (item.type.startsWith('image/')) {
-            handleImageFile(item.getAsFile());
-            break;
-        }
+        if (item.type.startsWith('image/')) { handleImageFile(item.getAsFile()); break; }
     }
 });
 
@@ -418,50 +555,33 @@ async function submitPost() {
     const location = document.getElementById('postLocation').value;
     const category = document.getElementById('postCategory').value;
     const status   = document.getElementById('postStatus').value;
-
-    if (!title) {
-        document.getElementById('postTitle').focus();
-        showToast('Please enter a title'); return;
-    }
+    if (!title) { document.getElementById('postTitle').focus(); showToast('Please enter a title'); return; }
 
     try {
-        const now = new Date();
+        const now     = new Date();
         const dateStr = now.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-
-        // Optimistically show in feed immediately
-        const tempId = Date.now();
+        const tempId  = 'temp-' + Date.now();
         const newPost = {
             id:            tempId,
             owner:         App.currentUser.uid,
             ownerName:     App.currentUser.name,
             ownerInitials: App.currentUser.initials,
             ownerColor:    App.currentUser.color,
+            ownerId:       App.currentUser.id,
             title, desc, location, category, status,
-            date:          dateStr,
-            comments:      0,
-            hasImage:      !!postImageDataUrl,
-            imgEmoji:      '',
-            imgClass:      '',
-            _imageUrl:     postImageDataUrl || null,
+            date:     dateStr,
+            comments: 0,
+            hasImage: !!postImageDataUrl,
+            _imageUrl: postImageDataUrl || null,
         };
-
         if (!Array.isArray(window.POSTS)) window.POSTS = [];
         POSTS.unshift(newPost);
         closePost();
         renderFeed();
         showToast('Post published!');
 
-        // Save to Supabase in background so everyone sees it
         if (USE_SUPABASE) {
-            const saved = await sb.createPost({
-                author_id:   App.currentUser.id,   // matches DB column name
-                title,
-                description: desc,
-                location,
-                category,
-                status,
-            });
-            // Replace temp post with real Supabase row (has real id, etc.)
+            const saved = await sb.createPost({ author_id: App.currentUser.id, title, description: desc, location, category, status });
             if (saved && saved[0]) {
                 const realPost = mapRow({ ...saved[0],
                     author_uid:      App.currentUser.uid,
@@ -472,10 +592,9 @@ async function submitPost() {
                 });
                 const idx = POSTS.findIndex(p => p.id === tempId);
                 if (idx > -1) POSTS[idx] = realPost;
-                renderFeed(); // re-render so real ID replaces temp ID
+                renderFeed();
             }
         }
-
     } catch(err) {
         console.error('submitPost error:', err);
         showToast('Something went wrong — check console (F12)');
@@ -558,18 +677,10 @@ async function sendMagicLink() {
     document.getElementById('loginFormWrap').style.display='none';
     document.getElementById('loginSent').style.display='block';
     document.getElementById('loginSentMsg').innerHTML=`We sent a sign-in link to<br><strong>${email}</strong><br><br>Click it to log in — no password required.`;
-    if (!USE_SUPABASE) {
-        setTimeout(()=>{
-            App.isLoggedIn=true;
-            App.currentUser={ id:'demo', uid: email.split('@')[0].replace(/\./g,'_'), name:email.split('@')[0], initials:email.split('@')[0].substring(0,2).toUpperCase(), color:'#5b8dff', role:'user' };
-            closeLogin(); updateMenuState(); renderFeed(); showToast('Signed in (demo)');
-        },1500);
-    }
 }
 
 // ── ADMIN REQUEST FORM ────────────────────────────────────────────────────────
 function contactAdmin() {
-    // show in-app form instead of opening email client (nicer UX)
     document.getElementById('loginFormWrap').style.display='none';
     document.getElementById('adminRequestWrap').style.display='block';
 }
@@ -584,11 +695,8 @@ async function submitAdminRequest() {
     const email     = document.getElementById('arEmail').value.trim();
     if (!name||!roleTitle||!reason||!email) { showToast('Please fill in all fields'); return; }
     if (USE_SUPABASE && App.isLoggedIn) {
-        await sb.submitAdminRequest({
-            user_id: App.currentUser.id, email, name, role_title: roleTitle, reason,
-        });
+        await sb.submitAdminRequest({ user_id: App.currentUser.id, email, name, role_title: roleTitle, reason });
     }
-    // Always show confirmation — even in demo mode
     document.getElementById('adminRequestWrap').style.display='none';
     document.getElementById('adminRequestSent').style.display='block';
 }
