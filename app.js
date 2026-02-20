@@ -392,6 +392,7 @@ async function openProfile(name, initials, color, uid, profileId) {
     document.getElementById('pStatReturned').textContent= '…';
     document.getElementById('profileMsgBtn').style.display =
         (App.isLoggedIn && uid === App.currentUser?.uid) ? 'none' : 'inline-flex';
+    document.getElementById('profileMsgBtn').onclick = () => tryDM(uid, name, initials, color);
     document.getElementById('profileHistoryList').innerHTML =
         '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading…</div>';
     openSheet('profileSheet','profileOverlay');
@@ -478,6 +479,16 @@ function closeSheet(id, overlayId) {
 }
 
 // ── DM ────────────────────────────────────────────────────────────────────────
+function tryDM(targetUid, targetName, targetInitials, targetColor) {
+    if (!App.isLoggedIn) { openLogin(); return; }
+    if (targetUid) {
+        openDM(targetName || targetUid, targetInitials || targetUid.slice(0,2).toUpperCase(), targetColor || '#5b8dff');
+    } else {
+        // Open DM from FAB — show a placeholder or last conversation
+        openDM('Messages', 'DM', '#5b8dff');
+    }
+}
+
 function openDM() {
     closeProfile();
     document.getElementById('dmAvatar').style.background = curProfile.color;
@@ -855,4 +866,43 @@ function showToast(msg) {
     const t=document.getElementById('toast');
     t.textContent=msg; t.classList.add('show');
     setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+
+// ── SHEET DRAG TO RESIZE ──────────────────────────────────────────────────────
+let _drag = null;
+
+function startDrag(e, sheetId) {
+    const sheet = document.getElementById(sheetId);
+    if (!sheet) return;
+    e.preventDefault();
+
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const startY  = clientY;
+    const startH  = sheet.getBoundingClientRect().height;
+    const maxH    = window.innerHeight * 0.95;
+    const minH    = 200;
+
+    sheet.style.transition = 'none';
+
+    function onMove(ev) {
+        const y    = ev.touches ? ev.touches[0].clientY : ev.clientY;
+        const diff = startY - y;
+        const newH = Math.min(maxH, Math.max(minH, startH + diff));
+        sheet.style.height = newH + 'px';
+        sheet.style.maxHeight = newH + 'px';
+    }
+
+    function onEnd() {
+        sheet.style.transition = '';
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onEnd);
+        document.removeEventListener('touchmove', onMove);
+        document.removeEventListener('touchend', onEnd);
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onEnd);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
 }
