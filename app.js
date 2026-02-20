@@ -737,10 +737,11 @@ function openAdminDashboard() { toggleMenu(); window.open('admin.html','_blank')
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 function openLogin() {
-    toggleMenu();
+    document.getElementById('menuDropdown').classList.remove('open');
     document.getElementById('loginFormWrap').style.display='';
     document.getElementById('loginSent').style.display='none';
     document.getElementById('adminRequestWrap').style.display='none';
+    document.getElementById('adminRequestSent').style.display='none';
     document.getElementById('loginEmail').value='';
     document.getElementById('loginEmail').style.borderColor='';
     document.getElementById('loginModal').classList.add('open');
