@@ -351,10 +351,11 @@ button { cursor: pointer; font-family: inherit; }
 .form-input:focus, .form-select:focus, .form-textarea:focus { border-color: rgba(91,141,255,0.3); }
 .form-textarea { resize: vertical; min-height: 68px; }
 .form-select { appearance: none; }
-.upload-area { background: var(--surface2); border: 1.5px dashed var(--border); border-radius: 11px; padding: 18px; text-align: center; margin-bottom: 12px; transition: border-color 0.2s; }
-.upload-area:hover { border-color: rgba(91,141,255,0.3); }
-.upload-text { font-size: 13px; color: var(--muted); }
-.upload-optional { font-size: 11px; color: var(--muted); opacity: 0.6; margin-top: 3px; }
+.upload-area { background: var(--surface2); border: 1.5px dashed var(--border); border-radius: 11px; padding: 20px 18px; text-align: center; margin-bottom: 0; transition: border-color 0.2s, background 0.2s; cursor: pointer; }
+.upload-area:hover { border-color: rgba(91,141,255,0.45); background: rgba(91,141,255,0.04); }
+.upload-area.drag-over { border-color: rgba(91,141,255,0.7); background: rgba(91,141,255,0.08); }
+.upload-text { font-size: 13px; color: var(--muted); margin-bottom: 2px; }
+.upload-optional { font-size: 11px; color: var(--muted); opacity: 0.55; margin-top: 2px; }
 .modal-actions { display: flex; gap: 8px; }
 .btn-cancel { flex: 1; padding: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 13px; transition: opacity 0.15s; }
 .btn-submit { flex: 2; padding: 10px; background: var(--accent); border: none; border-radius: 10px; color: #fff; font-size: 13px; font-weight: 600; transition: opacity 0.15s; }
