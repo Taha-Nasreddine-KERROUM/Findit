@@ -71,9 +71,19 @@
 </div>
 
 <!-- ── FAB ── -->
-<button class="fab-post" onclick="tryPost()">
-    <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-</button>
+<div class="fab-island">
+    <button class="fab-dm" onclick="tryDM()" title="Messages">
+        <svg width="17" height="17" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+    </button>
+    <div class="fab-divider"></div>
+    <button class="fab-add" onclick="tryPost()" title="New post">
+        <svg width="19" height="19" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+    </button>
+</div>
 
 <!-- OVERLAY (comments) -->
 <div class="overlay" id="overlay" onclick="closeComments()"></div>
@@ -119,7 +129,7 @@
 
 <!-- ── PROFILE OVERLAY + SHEET ── -->
 <div class="sheet-overlay" id="profileOverlay" onclick="closeProfile()"></div>
-<div class="bottom-sheet" id="profileSheet">
+<div class="bottom-sheet" id="profileSheet"><div class="sheet-drag-handle" onmousedown="startDrag(event,'profileSheet')" ontouchstart="startDrag(event,'profileSheet')"><div class="drag-pill"></div></div>
     <div class="profile-top-row">
         <div class="profile-left">
             <div class="profile-pic" id="pAvatar" style="background:#4da6ff">AB</div>
@@ -147,7 +157,7 @@
 
 
 <!-- ── DM SHEET ── -->
-<div class="dm-sheet" id="dmSheet">
+<div class="dm-sheet" id="dmSheet"><div class="sheet-drag-handle" onmousedown="startDrag(event,'dmSheet')" ontouchstart="startDrag(event,'dmSheet')"><div class="drag-pill"></div></div>
     <div class="dm-header">
         <div class="dm-avatar" id="dmAvatar" style="background:#4da6ff">AB</div>
         <div><div class="dm-name" id="dmName">Amir B.</div><div class="dm-online">online</div></div>
