@@ -29,10 +29,11 @@ const sb = (() => {
 
     // ── AUTH ──────────────────────────────────────────────────────────────────
     async function sendMagicLink(email) {
-        return api('/auth/v1/magiclink', {
+        return api('/auth/v1/otp', {
             method: 'POST',
             body: JSON.stringify({
                 email,
+                create_user: true,
                 options: { emailRedirectTo: window.location.origin + window.location.pathname },
             }),
         });
