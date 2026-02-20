@@ -348,12 +348,29 @@
                 Admin authority?
                 <a class="login-admin-link" onclick="contactAdmin()">Request access</a>
             </div>
-            <button class="btn-full btn-submit" onclick="sendMagicLink()">Send sign-in link</button>
+            <button class="btn-full btn-submit" onclick="sendMagicLink()">Send sign-in code</button>
             <div class="login-note">We'll email you a one-time link to continue.</div>
         </div>
 
-        <!-- Magic link sent -->
-        <div class="login-sent" id="loginSent">
+        <!-- OTP code entry -->
+        <div id="loginOtpWrap" style="display:none">
+            <div class="login-title">Enter your code</div>
+            <div class="login-sub">Your sign-in code is shown below. Copy it into the box and click Sign in.</div>
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center;margin-bottom:14px">
+                <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Your one-time code</div>
+                <div id="otpCodeDisplay" style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;letter-spacing:8px;color:var(--accent)">------</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:6px">Valid for 10 minutes</div>
+            </div>
+            <input class="login-input" type="text" id="otpInput" placeholder="Enter 6-digit code"
+                   maxlength="6" inputmode="numeric" pattern="[0-9]*"
+                   onkeydown="if(event.key==='Enter')verifyOtp()"
+                   style="text-align:center;letter-spacing:6px;font-size:20px;font-family:'Syne',sans-serif">
+            <button class="btn-full btn-submit" id="otpVerifyBtn" onclick="verifyOtp()" style="margin-top:10px">Sign in</button>
+            <button class="btn-full btn-cancel" onclick="backToEmailStep()" style="margin-top:6px">← Use different email</button>
+        </div>
+
+        <!-- Magic link sent (unused but kept for compat) -->
+        <div class="login-sent" id="loginSent" style="display:none">
             <div class="login-sent-icon">📬</div>
             <div class="login-sent-title">Check your inbox</div>
             <div class="login-sent-msg" id="loginSentMsg"></div>
@@ -384,7 +401,7 @@
     </div>
 </div>
 
-<script src="supabase.js"></script>
+<script src="api.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 </body>
