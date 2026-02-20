@@ -9,7 +9,7 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const sb = (() => {
-    let _token = sessionStorage.getItem('fi_token') || null;
+    let _token = localStorage.getItem('fi_token') || null;
 
     function headers(extra = {}) {
         return {
@@ -55,8 +55,8 @@ const sb = (() => {
         const token = p.get('access_token');
         if (!token) return restoreSession();
         _token = token;
-        sessionStorage.setItem('fi_token', token);
-        sessionStorage.setItem('fi_refresh', p.get('refresh_token') || '');
+        localStorage.setItem('fi_token', token);
+        localStorage.setItem('fi_refresh', p.get('refresh_token') || '');
         window.history.replaceState(null, '', window.location.pathname);
         return getMe();
     }
@@ -69,8 +69,8 @@ const sb = (() => {
     async function signOut() {
         await api('/auth/v1/logout', { method: 'POST' });
         _token = null;
-        sessionStorage.removeItem('fi_token');
-        sessionStorage.removeItem('fi_refresh');
+        localStorage.removeItem('fi_token');
+        localStorage.removeItem('fi_refresh');
     }
 
     // ── PROFILES ──────────────────────────────────────────────────────────────
