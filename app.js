@@ -294,6 +294,7 @@ function buildCommentHtml(c, byParent) {
       <div class="comment-body">
         <div class="comment-user">u/${uid}</div>
         <div class="comment-text">${escHtml(c.body)}</div>
+        ${c.image_url ? `<img src="${c.image_url}" style="max-width:100%;border-radius:8px;margin-top:6px;display:block">` : ''}
         <div class="comment-meta">
           <span class="comment-time">${time}</span>
           ${App.isLoggedIn ? `<button class="reply-btn" onclick="toggleReply(this,'${c.id}')">Reply</button>` : ''}
@@ -342,8 +343,7 @@ async function submitReply(parentId) {
     if (!body) return;
     input.value = '';
     if (USE_SUPABASE) {
-        await sb.createComment(App.openPostId, body, parentId);
-        // Reload comments
+        await sb.createComment(App.openPostId, body, parentId, null);
         const comments = await sb.getComments(App.openPostId);
         renderComments(comments || []);
     }
@@ -353,11 +353,17 @@ async function submitCommentClick() {
     if (!App.isLoggedIn) { showToast('Sign in to comment'); return; }
     const input = document.getElementById('commentInput');
     const body  = input.value.trim();
-    if (!body || !App.openPostId) return;
+    if ((!body && !commentImageDataUrl) || !App.openPostId) return;
     input.value = '';
 
     if (USE_SUPABASE) {
-        await sb.createComment(App.openPostId, body);
+        // Upload comment image if attached
+        let imgUrl = null;
+        if (commentImageDataUrl) {
+            imgUrl = await sb.uploadImage(commentImageDataUrl, 'comments');
+            clearCommentImage();
+        }
+        await sb.createComment(App.openPostId, body || '', null, imgUrl);
         const comments = await sb.getComments(App.openPostId);
         renderComments(comments || []);
         // Update comment count on card
@@ -538,6 +544,51 @@ function clearImage() {
     document.getElementById('postImageInput').value='';
 }
 
+// ── EDIT IMAGE HELPERS ───────────────────────────────────────────────────────
+let editImageDataUrl = null;
+let editImageCleared = false;
+
+function handleEditImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        editImageDataUrl = e.target.result;
+        editImageCleared = false;
+        document.getElementById('editUploadPlaceholder').style.display='none';
+        document.getElementById('editUploadPreviewWrap').style.display='block';
+        document.getElementById('editImagePreview').src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+function clearEditImage() {
+    editImageDataUrl = null;
+    editImageCleared = true;
+    document.getElementById('editUploadPlaceholder').style.display='';
+    document.getElementById('editUploadPreviewWrap').style.display='none';
+    document.getElementById('editImagePreview').src='';
+    document.getElementById('editImageInput').value='';
+}
+
+// ── COMMENT IMAGE HELPERS ─────────────────────────────────────────────────────
+let commentImageDataUrl = null;
+
+function handleCommentImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        commentImageDataUrl = e.target.result;
+        document.getElementById('commentImagePreview').src = e.target.result;
+        document.getElementById('commentImagePreviewWrap').style.display='flex';
+    };
+    reader.readAsDataURL(file);
+}
+function clearCommentImage() {
+    commentImageDataUrl = null;
+    document.getElementById('commentImagePreview').src='';
+    document.getElementById('commentImagePreviewWrap').style.display='none';
+    document.getElementById('commentImageInput').value='';
+}
+
 document.addEventListener('paste', e => {
     if (!document.getElementById('postModal').classList.contains('open')) return;
     const items = e.clipboardData?.items;
@@ -581,14 +632,21 @@ async function submitPost() {
         showToast('Post published!');
 
         if (USE_SUPABASE) {
-            const saved = await sb.createPost({ author_id: App.currentUser.id, title, description: desc, location, category, status });
+            // Upload image to Supabase Storage first so it has a real public URL
+            let imageUrl = null;
+            if (postImageDataUrl) {
+                imageUrl = await sb.uploadImage(postImageDataUrl, 'posts');
+                // Update local post with real URL right away
+                const tempPost = POSTS.find(p => p.id === tempId);
+                if (tempPost && imageUrl) { tempPost._imageUrl = imageUrl; renderFeed(); }
+            }
+            const saved = await sb.createPost({ author_id: App.currentUser.id, title, description: desc, location, category, status, image_url: imageUrl });
             if (saved && saved[0]) {
                 const realPost = mapRow({ ...saved[0],
                     author_uid:      App.currentUser.uid,
                     author_name:     App.currentUser.name,
                     author_initials: App.currentUser.initials,
                     author_color:    App.currentUser.color,
-                    image_url:       postImageDataUrl || null,
                 });
                 const idx = POSTS.findIndex(p => p.id === tempId);
                 if (idx > -1) POSTS[idx] = realPost;
@@ -604,13 +662,26 @@ async function submitPost() {
 // ── EDIT ──────────────────────────────────────────────────────────────────────
 let editingPostId=null, editSelectedStatus=null;
 function openEdit(postId) {
-    editingPostId=postId; editSelectedStatus=null;
+    editingPostId=postId; editSelectedStatus=null; editImageDataUrl=null; editImageCleared=false;
     document.querySelectorAll('.status-opt').forEach(o=>o.className='status-opt');
     const post=POSTS.find(p=>p.id===postId); if (!post) return;
     document.getElementById('editTitle').value=post.title;
     document.getElementById('editDesc').value=post.desc;
     const cur=document.querySelector(`.status-opt[data-status="${post.status}"]`);
     if (cur) { cur.classList.add('sel-'+post.status); editSelectedStatus=post.status; }
+    // Show existing image if any
+    const preview = document.getElementById('editImagePreview');
+    const placeholder = document.getElementById('editUploadPlaceholder');
+    const previewWrap = document.getElementById('editUploadPreviewWrap');
+    if (post._imageUrl) {
+        preview.src = post._imageUrl;
+        placeholder.style.display='none';
+        previewWrap.style.display='block';
+    } else {
+        preview.src='';
+        placeholder.style.display='';
+        previewWrap.style.display='none';
+    }
     document.getElementById('editModal').classList.add('open');
     document.body.style.overflow='hidden';
 }
@@ -627,7 +698,20 @@ async function saveEdit() {
     if (newTitle) post.title=newTitle;
     if (newDesc)  post.desc=newDesc;
     if (editSelectedStatus) post.status=editSelectedStatus;
-    if (USE_SUPABASE) await sb.updatePost(post.id, {title:post.title,description:post.desc,status:post.status});
+
+    const fields = { title: post.title, description: post.desc, status: post.status };
+
+    if (USE_SUPABASE) {
+        // Upload new image if one was selected
+        if (editImageDataUrl) {
+            const imageUrl = await sb.uploadImage(editImageDataUrl, 'posts');
+            if (imageUrl) { post._imageUrl = imageUrl; fields.image_url = imageUrl; }
+        } else if (editImageCleared) {
+            post._imageUrl = null;
+            fields.image_url = null;
+        }
+        await sb.updatePost(post.id, fields);
+    }
     closeEdit(); renderFeed(); showToast('Post updated');
 }
 
