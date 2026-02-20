@@ -25,10 +25,9 @@ const App = {
             const restored = await sb.restoreSession();
             if (restored) setUser(restored);
         }
-    } else {
-        // Demo: simulate being logged in as amir_b who owns post 1
-        App.isLoggedIn = true;
-        App.currentUser = { id:'demo-amir', uid:'amir_b', name:'Amir', initials:'AB', color:'#4da6ff', role:'user' };
+        // Load all real posts from Supabase
+        const rows = await sb.getPosts();
+        POSTS = (rows || []).filter(r => !r.is_deleted).map(mapRow);
     }
     updateMenuState();
     initSearch();
@@ -36,6 +35,29 @@ const App = {
     renderFeed();
 })();
 
+// Map a Supabase posts_with_author row to a card-compatible object
+function mapRow(r) {
+    const d = new Date(r.created_at);
+    const dateStr = d.toLocaleDateString('en-GB', {day:'numeric', month:'short'});
+    return {
+        id:            r.id,
+        owner:         r.owner_uid  || r.uid || '',
+        ownerName:     r.owner_name || r.name || '',
+        ownerInitials: r.owner_initials || r.initials || '?',
+        ownerColor:    r.owner_color  || r.color || '#5b8dff',
+        title:         r.title || '',
+        desc:          r.description || '',
+        location:      r.location || '',
+        category:      r.category || '',
+        status:        r.status || 'found',
+        date:          dateStr,
+        comments:      r.comment_count || 0,
+        hasImage:      !!r.image_url,
+        imgEmoji:      '',
+        imgClass:      '',
+        _imageUrl:     r.image_url || null,
+    };
+}
 function setUser(me) {
     App.isLoggedIn = true;
     App.currentUser = {
@@ -62,7 +84,7 @@ function buildCard(post) {
     const isOwner = App.isLoggedIn && (post.owner === App.currentUser?.uid || App.isAdmin);
     let imgHtml = '';
     if (post._imageUrl) {
-        imgHtml = `<div class="card-image"><img src="${post._imageUrl}" style="width:100%;border-radius:8px;max-height:220px;object-fit:cover;display:block"></div>`;
+        imgHtml = `<div class="card-image"><img src="${post._imageUrl}" style="width:100%;border-radius:8px;display:block;height:auto"></div>`;
     } else if (post.hasImage) {
         imgHtml = `<div class="card-image"><div class="img-placeholder ${post.imgClass}">${post.imgEmoji}</div></div>`;
     }
@@ -404,8 +426,11 @@ async function submitPost() {
     try {
         const now = new Date();
         const dateStr = now.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+
+        // Optimistically show in feed immediately
+        const tempId = Date.now();
         const newPost = {
-            id:            Date.now(),
+            id:            tempId,
             owner:         App.currentUser.uid,
             ownerName:     App.currentUser.name,
             ownerInitials: App.currentUser.initials,
@@ -419,22 +444,35 @@ async function submitPost() {
             _imageUrl:     postImageDataUrl || null,
         };
 
+        if (!Array.isArray(window.POSTS)) window.POSTS = [];
+        POSTS.unshift(newPost);
+        closePost();
+        renderFeed();
+        showToast('Post published!');
+
+        // Save to Supabase in background so everyone sees it
         if (USE_SUPABASE) {
-            sb.createPost({
+            const saved = await sb.createPost({
                 owner_id:    App.currentUser.id,
                 title,
                 description: desc,
                 location,
                 category,
                 status,
-            }).catch(err => console.error('Supabase save failed:', err));
+            });
+            // Replace temp post with real Supabase row (has real id, etc.)
+            if (saved && saved[0]) {
+                const realPost = mapRow({ ...saved[0],
+                    owner_uid:      App.currentUser.uid,
+                    owner_name:     App.currentUser.name,
+                    owner_initials: App.currentUser.initials,
+                    owner_color:    App.currentUser.color,
+                    image_url:      postImageDataUrl || null,
+                });
+                const idx = POSTS.findIndex(p => p.id === tempId);
+                if (idx > -1) POSTS[idx] = realPost;
+            }
         }
-
-        if (!Array.isArray(window.POSTS)) window.POSTS = [];
-        POSTS.unshift(newPost);
-        closePost();
-        renderFeed();
-        showToast('Post published!');
 
     } catch(err) {
         console.error('submitPost error:', err);
