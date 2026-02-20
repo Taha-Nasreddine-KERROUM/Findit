@@ -134,15 +134,12 @@ const sb = (() => {
     }
 
     async function createComment(postId, body, parentId = null) {
+        const payload = { post_id: postId, body };
+        if (parentId) payload.parent_id = parentId;
         return api('/rest/v1/comments', {
             method: 'POST',
             headers: { Prefer: 'return=representation' },
-            body: JSON.stringify({
-                post_id:   postId,
-                author_id: null, // set by RLS / will be overridden — author_id comes from auth
-                body,
-                parent_id: parentId || null,
-            }),
+            body: JSON.stringify(payload),
         });
     }
 
