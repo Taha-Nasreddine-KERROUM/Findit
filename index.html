@@ -93,49 +93,17 @@
             <button class="close-panel" onclick="closeComments()">✕</button>
         </div>
     </div>
-    <div class="comments-scroll" id="commentsScroll">
-        <div class="comment">
-            <div class="comment-avatar" style="background:#4da6ff" onclick="openProfile('Yousef','YS','#4da6ff','yousef_s')">YS</div>
-            <div class="comment-body">
-                <div class="comment-user" onclick="openProfile('Yousef','YS','#4da6ff','yousef_s')">u/yousef_s</div>
-                <div class="comment-text">Could this be mine? I was at the library around 3pm, had my AirPods case in my bag.</div>
-                <div class="comment-meta"><span class="comment-time">2 hours ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
-                <div class="reply-form"></div><div class="replies"></div>
-            </div>
-        </div>
-        <div class="comment">
-            <div class="comment-avatar" style="background:#22c97a" onclick="openProfile('Amir','AB','#22c97a','amir_b')">AB</div>
-            <div class="comment-body">
-                <div class="comment-user" onclick="openProfile('Amir','AB','#22c97a','amir_b')">u/amir_b</div>
-                <div class="comment-text">@yousef_s DM me with a photo of the case and I'll verify! Library desk will release it to you.</div>
-                <div class="comment-meta"><span class="comment-time">1 hour ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
-                <div class="reply-form"></div><div class="replies"></div>
-            </div>
-        </div>
-        <div class="comment">
-            <div class="comment-avatar" style="background:#a084f5">KM</div>
-            <div class="comment-body">
-                <div class="comment-user">u/khalid_m</div>
-                <div class="comment-text">FindIt has made this so much easier. Hope it reaches the owner!</div>
-                <div class="comment-meta"><span class="comment-time">45 min ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
-                <div class="reply-form"></div><div class="replies"></div>
-            </div>
-        </div>
-        <div class="comment">
-            <div class="comment-avatar" style="background:#ff6b6b">RI</div>
-            <div class="comment-body">
-                <div class="comment-user">u/rana_i</div>
-                <div class="comment-text">Library staff confirmed they have them — spotted when I went to return books!</div>
-                <div class="comment-meta"><span class="comment-time">10 min ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
-                <div class="reply-form"></div><div class="replies"></div>
-            </div>
-        </div>
-    </div>
-    <div class="comment-input-wrap">
+    <div class="comments-scroll" id="commentsScroll"></div>
+    <div id="commentInputWrap" class="comment-input-wrap">
         <input class="comment-input" id="commentInput" placeholder="Write a comment…" onkeydown="if(event.key==='Enter')submitCommentClick()">
         <button class="send-btn" onclick="submitCommentClick()">
             <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         </button>
+    </div>
+    <div id="commentLoginPrompt" style="display:none;padding:12px 16px;border-top:1px solid var(--border);text-align:center">
+        <span style="font-size:13px;color:var(--muted)">
+            <a onclick="closeComments();openLogin()" style="color:var(--accent);cursor:pointer;font-weight:500">Sign in</a> to join the conversation
+        </span>
     </div>
 </div>
 
@@ -154,56 +122,19 @@
         <button class="sheet-close-btn" onclick="closeProfile()">✕</button>
     </div>
     <div class="profile-stats">
-        <div class="stat"><div class="stat-num">23</div><div class="stat-label">Posted</div></div>
-        <div class="stat"><div class="stat-num">18</div><div class="stat-label">Returned</div></div>
-        <div class="stat"><div class="stat-num">5</div><div class="stat-label">Recovered</div></div>
+        <div class="stat"><div class="stat-num" id="pStatPosted">…</div><div class="stat-label">Posted</div></div>
+        <div class="stat"><div class="stat-num" id="pStatReturned">…</div><div class="stat-label">Recovered</div></div>
+        <div class="stat"><div class="stat-num" id="pStatComments">…</div><div class="stat-label">Comments</div></div>
     </div>
     <button class="profile-msg-btn" id="profileMsgBtn" onclick="openDM()">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Message
     </button>
     <div class="activity-label">Activity</div>
-    <div class="activity-item" onclick="openHistoryItem('AirPods Pro – Library','Found on study table row 3. Turned into library desk.','found','Main Library – 2nd Floor','Feb 16','Electronics')">
-        <span class="act-badge" style="background:rgba(34,201,122,0.1);color:var(--found);border:1px solid rgba(34,201,122,0.18)">Found</span>
-        <span style="font-size:13px">AirPods Pro – Library</span>
-        <span style="font-size:11px;color:var(--muted);margin-left:auto">Today</span>
-        <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
-    </div>
-    <div class="activity-item" onclick="openHistoryItem('Student ID Card','Found near cashier in cafeteria. Handed to security.','found','Student Cafeteria','Feb 14','ID / Cards')">
-        <span class="act-badge" style="background:rgba(34,201,122,0.1);color:var(--found);border:1px solid rgba(34,201,122,0.18)">Found</span>
-        <span style="font-size:13px">Student ID – Cafeteria</span>
-        <span style="font-size:11px;color:var(--muted);margin-left:auto">3 days ago</span>
-        <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
-    </div>
-    <div class="activity-item" onclick="openHistoryItem('Lost wallet – brown leather','Someone had lost their wallet by the vending machines. Helped locate the owner via FindIt DM.','recovered','Engineering Building','Feb 11','Wallet / Bags')">
-        <span class="act-badge" style="background:rgba(232,168,56,0.1);color:var(--recovered);border:1px solid rgba(232,168,56,0.2)">Helped</span>
-        <span style="font-size:13px">Located lost wallet owner</span>
-        <span style="font-size:11px;color:var(--muted);margin-left:auto">1 week ago</span>
-        <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
-    </div>
-    <div class="activity-item" onclick="openHistoryItem('Laptop charger – USB-C white','Left in Engineering room 101. Posting for owner to claim.','found','Engineering Building','Feb 3','Electronics')">
-        <span class="act-badge" style="background:rgba(34,201,122,0.1);color:var(--found);border:1px solid rgba(34,201,122,0.18)">Found</span>
-        <span style="font-size:13px">Laptop charger – Engineering</span>
-        <span style="font-size:11px;color:var(--muted);margin-left:auto">2 weeks ago</span>
-        <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
-    </div>
+    <div id="profileHistoryList"></div>
 </div>
 
-<!-- ── HISTORY ITEM SHEET ── -->
-<div class="bottom-sheet history-sheet" id="historySheet" style="z-index:350">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px" id="hTitle"></div>
-        <button class="sheet-close-btn" onclick="closeHistoryItem()">✕</button>
-    </div>
-    <div style="display:flex;gap:7px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
-        <span class="status-badge" id="hStatus"></span>
-        <span class="card-category" id="hCategory"></span>
-        <span class="card-date" id="hDate"></span>
-        <span style="font-size:11px;color:var(--muted)" id="hLocation"></span>
-    </div>
-    <div style="font-size:13px;color:#9ba1b0;line-height:1.6;margin-bottom:16px" id="hDesc"></div>
-    <div style="font-size:11px;color:var(--muted);text-align:center;padding-top:8px;border-top:1px solid var(--border)">Historical post — read only</div>
-</div>
+
 
 <!-- ── DM SHEET ── -->
 <div class="dm-sheet" id="dmSheet">
@@ -212,12 +143,7 @@
         <div><div class="dm-name" id="dmName">Amir B.</div><div class="dm-online">online</div></div>
         <button class="dm-close" onclick="closeDM()">✕</button>
     </div>
-    <div class="dm-messages" id="dmMessages">
-        <div class="dm-msg them">Hey! I posted about the AirPods I found. Is it yours?</div>
-        <div class="dm-msg me">Yes! The case has a tiny scratch on the back right?</div>
-        <div class="dm-msg them">Exactly that one! Come pick it up at the library desk anytime today.</div>
-        <div class="dm-msg me">On my way, thank you so much!</div>
-    </div>
+    <div class="dm-messages" id="dmMessages"></div>
     <div class="dm-input-wrap">
         <input class="dm-input" placeholder="Message…" id="dmInput" onkeydown="if(event.key==='Enter')sendDMClick()">
         <button class="send-btn" onclick="sendDMClick()">
