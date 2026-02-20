@@ -401,46 +401,45 @@ async function submitPost() {
         showToast('Please enter a title'); return;
     }
 
-    const btn = document.getElementById('postSubmitBtn');
-    btn.disabled = true; btn.textContent = 'Posting…';
+    try {
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+        const newPost = {
+            id:            Date.now(),
+            owner:         App.currentUser.uid,
+            ownerName:     App.currentUser.name,
+            ownerInitials: App.currentUser.initials,
+            ownerColor:    App.currentUser.color,
+            title, desc, location, category, status,
+            date:          dateStr,
+            comments:      0,
+            hasImage:      !!postImageDataUrl,
+            imgEmoji:      '',
+            imgClass:      '',
+            _imageUrl:     postImageDataUrl || null,
+        };
 
-    // Build local post object to show immediately
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-    const newPost = {
-        id:         Date.now(),
-        owner:      App.currentUser.uid,
-        ownerName:  App.currentUser.name,
-        ownerInitials: App.currentUser.initials,
-        ownerColor: App.currentUser.color,
-        title, desc, location, category, status,
-        date:       dateStr,
-        comments:   0,
-        hasImage:   !!postImageDataUrl,
-        imgEmoji:   '',
-        imgClass:   '',
-        _imageUrl:  postImageDataUrl || null,
-    };
+        if (USE_SUPABASE) {
+            sb.createPost({
+                owner_id:    App.currentUser.id,
+                title,
+                description: desc,
+                location,
+                category,
+                status,
+            }).catch(err => console.error('Supabase save failed:', err));
+        }
 
-    // Save to Supabase (fire and don't block)
-    if (USE_SUPABASE) {
-        sb.createPost({
-            owner_id:    App.currentUser.id,
-            title,
-            description: desc,
-            location,
-            category,
-            status,
-        }).catch(console.error);
+        if (!Array.isArray(window.POSTS)) window.POSTS = [];
+        POSTS.unshift(newPost);
+        closePost();
+        renderFeed();
+        showToast('Post published!');
+
+    } catch(err) {
+        console.error('submitPost error:', err);
+        showToast('Something went wrong — check console (F12)');
     }
-
-    // Add to local feed immediately
-    POSTS.unshift(newPost);
-    closePost();
-    renderFeed();
-    showToast('✅ Post published!');
-
-    btn.disabled = false; btn.textContent = 'Post';
 }
 
 // ── EDIT ──────────────────────────────────────────────────────────────────────
