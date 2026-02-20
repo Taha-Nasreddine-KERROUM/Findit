@@ -396,17 +396,28 @@ async function openProfile(name, initials, color, uid, profileId) {
         '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading…</div>';
     openSheet('profileSheet','profileOverlay');
 
-    if (!USE_SUPABASE || !profileId) return;
+    if (!uid) return;
 
-    // Load real stats + posts in parallel
+    // Load real stats + posts in parallel — API uses uid not UUID
     const [stats, posts] = await Promise.all([
-        sb.getProfileStats(profileId),
-        sb.getPostsByUser(profileId),
+        sb.getProfileStats(uid),
+        sb.getPostsByUser(uid),
     ]);
 
-    document.getElementById('pPoints').textContent       = stats.points + ' points';
+    if (!stats || !posts) {
+        document.getElementById('pPoints').textContent       = '—';
+        document.getElementById('pStatPosted').textContent   = '—';
+        document.getElementById('pStatReturned').textContent = '—';
+        document.getElementById('profileHistoryList').innerHTML =
+            '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Could not load profile</div>';
+        return;
+    }
+
+    document.getElementById('pPoints').textContent       = stats.points + ' pts';
     document.getElementById('pStatPosted').textContent   = stats.postCount;
-    document.getElementById('pStatReturned').textContent = posts.filter(p => p.status === 'recovered').length;
+    document.getElementById('pStatReturned').textContent = (posts || []).filter(p => p.status === 'recovered').length;
+    const commentsEl = document.getElementById('pStatComments');
+    if (commentsEl) commentsEl.textContent = stats.commentCount;
 
     const list = document.getElementById('profileHistoryList');
     if (!posts.length) {
