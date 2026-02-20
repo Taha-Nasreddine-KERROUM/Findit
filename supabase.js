@@ -20,7 +20,7 @@ const sb = (() => {
         });
         if (!r.ok) {
             const err = await r.json().catch(() => ({}));
-            console.error('sb error', path, err);
+            console.error('Supabase error', r.status, path, JSON.stringify(err));
             return null;
         }
         const text = await r.text();
