@@ -246,7 +246,7 @@
         <div class="form-row">
             <div class="form-group">
                 <label class="form-label">Location</label>
-                <select class="form-select">
+                <select class="form-select" id="postLocation">
                     <option>Main Library</option><option>Cafeteria</option>
                     <option>Engineering Building</option><option>Sports Complex</option>
                     <option>Dorms – Block A</option><option>Dorms – Block B</option>
@@ -255,7 +255,7 @@
             </div>
             <div class="form-group">
                 <label class="form-label">Category</label>
-                <select class="form-select">
+                <select class="form-select" id="postCategory">
                     <option>Electronics</option><option>Bags</option><option>Accessories</option>
                     <option>Clothing</option><option>ID / Cards</option><option>Keys</option><option>Other</option>
                 </select>
@@ -264,26 +264,38 @@
         <div class="form-row">
             <div class="form-group">
                 <label class="form-label">Status</label>
-                <select class="form-select">
-                    <option>Found</option><option>Lost</option><option>Waiting</option>
+                <select class="form-select" id="postStatus">
+                    <option value="found">Found</option><option value="lost">Lost</option><option value="waiting">Waiting</option>
                 </select>
             </div>
         </div>
         <div class="form-group" style="margin-bottom:11px">
             <label class="form-label">Title</label>
-            <input class="form-input" type="text" placeholder="e.g. Black backpack with red keychain">
+            <input class="form-input" id="postTitle" type="text" placeholder="e.g. Black backpack with red keychain">
         </div>
         <div class="form-group" style="margin-bottom:11px">
             <label class="form-label">Description</label>
-            <textarea class="form-textarea" placeholder="Describe the item, exact location, time, identifying features…"></textarea>
+            <textarea class="form-textarea" id="postDesc" placeholder="Describe the item, exact location, time, identifying features…"></textarea>
         </div>
-        <div class="upload-area">
-            <div class="upload-text">Tap to add a photo</div>
-            <div class="upload-optional">Optional</div>
+        <!-- Image upload: browse + paste + drag-drop -->
+        <div class="form-group" style="margin-bottom:11px">
+            <label class="form-label">Photo <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('postImageInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleImageDrop(event)">
+                <input type="file" id="postImageInput" accept="image/*" style="display:none" onchange="handleImageFile(this.files[0])">
+                <div id="uploadPlaceholder">
+                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom:6px;opacity:0.4"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    <div class="upload-text">Browse or paste a photo</div>
+                    <div class="upload-optional">Click to browse · Paste from clipboard · Drag &amp; drop</div>
+                </div>
+                <div id="uploadPreviewWrap" style="display:none;position:relative">
+                    <img id="uploadPreview" style="max-width:100%;max-height:180px;border-radius:8px;display:block;margin:0 auto">
+                    <button onclick="event.stopPropagation();clearImage()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:13px;line-height:1">✕</button>
+                </div>
+            </div>
         </div>
         <div class="modal-actions">
             <button class="btn-cancel" onclick="closePost()">Cancel</button>
-            <button class="btn-submit" onclick="closePost();showToast('Post submitted!')">Post</button>
+            <button class="btn-submit" id="postSubmitBtn" onclick="submitPost()">Post</button>
         </div>
     </div>
 </div>
