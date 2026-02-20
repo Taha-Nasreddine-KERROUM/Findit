@@ -53,17 +53,19 @@ function mapRow(r) {
 }
 
 function setUser(me) {
+    // Accept both {profile:{...}} and flat profile object
+    const p = me.profile || me;
     App.isLoggedIn   = true;
     App.currentUser  = {
-        id:       me.profile.id,
-        uid:      me.profile.uid,
-        name:     me.profile.name,
-        initials: me.profile.initials,
-        color:    me.profile.color,
-        role:     me.profile.role,
+        id:       p.id,
+        uid:      p.uid,
+        name:     p.name,
+        initials: p.initials,
+        color:    p.color,
+        role:     p.role,
     };
-    App.isAdmin      = ['admin','super_admin'].includes(me.profile.role);
-    App.isSuperAdmin = me.profile.role === 'super_admin';
+    App.isAdmin      = ['admin','super_admin'].includes(p.role);
+    App.isSuperAdmin = p.role === 'super_admin';
 }
 
 // ── RENDER ENGINE ─────────────────────────────────────────────────────────────
@@ -739,6 +741,7 @@ function openAdminDashboard() { toggleMenu(); window.open('admin.html','_blank')
 function openLogin() {
     document.getElementById('menuDropdown').classList.remove('open');
     document.getElementById('loginFormWrap').style.display='';
+    document.getElementById('loginOtpWrap').style.display='none';
     document.getElementById('loginSent').style.display='none';
     document.getElementById('adminRequestWrap').style.display='none';
     document.getElementById('adminRequestSent').style.display='none';
@@ -749,20 +752,52 @@ function openLogin() {
 }
 function closeLogin() { document.getElementById('loginModal').classList.remove('open'); document.body.style.overflow=''; }
 
+let _otpEmail = '';
+
 async function sendMagicLink() {
-    const email=document.getElementById('loginEmail').value.trim();
-    if (!email||!email.includes('@')) {
+    const email = document.getElementById('loginEmail').value.trim();
+    if (!email || !email.includes('@')) {
         document.getElementById('loginEmail').style.borderColor='rgba(224,90,90,0.5)';
         document.getElementById('loginEmail').focus(); return;
     }
-    if (USE_SUPABASE) {
-        await sb.sendMagicLink(email);
-        // Show success regardless — Supabase always sends if email is valid
-        // Check console (F12) for any errors
-    }
+    const btn = document.querySelector('#loginFormWrap .btn-full.btn-submit');
+    if (btn) { btn.textContent='Sending…'; btn.disabled=true; }
+
+    const res = await sb.requestOtp(email);
+
+    if (btn) { btn.textContent='Send sign-in code'; btn.disabled=false; }
+    if (!res || !res.code) { showToast('Could not reach server. Try again.'); return; }
+
+    _otpEmail = email;
+    // Show the code right in the UI
     document.getElementById('loginFormWrap').style.display='none';
-    document.getElementById('loginSent').style.display='block';
-    document.getElementById('loginSentMsg').innerHTML=`We sent a sign-in link to<br><strong>${email}</strong><br><br>Click it to log in — no password required.`;
+    document.getElementById('loginOtpWrap').style.display='block';
+    document.getElementById('otpCodeDisplay').textContent = res.code;
+    document.getElementById('otpInput').value='';
+    document.getElementById('otpInput').focus();
+}
+
+async function verifyOtp() {
+    const code = document.getElementById('otpInput').value.trim();
+    if (!code) { document.getElementById('otpInput').focus(); return; }
+    const btn = document.getElementById('otpVerifyBtn');
+    btn.textContent='Verifying…'; btn.disabled=true;
+
+    const res = await sb.verifyOtp(_otpEmail, code);
+    btn.textContent='Sign in'; btn.disabled=false;
+
+    if (!res || !res.token) {
+        showToast(res === null ? 'Server error' : 'Wrong or expired code');
+        return;
+    }
+    setUser(res);
+    closeLogin();
+    updateMenuState();
+    // Reload posts now that we're logged in
+    const rows = await sb.getPosts();
+    POSTS = (rows || []).map(mapRow);
+    renderFeed();
+    showToast('Signed in!');
 }
 
 // ── ADMIN REQUEST FORM ────────────────────────────────────────────────────────
@@ -772,6 +807,10 @@ function contactAdmin() {
 }
 function backToLogin() {
     document.getElementById('adminRequestWrap').style.display='none';
+    document.getElementById('loginFormWrap').style.display='block';
+}
+function backToEmailStep() {
+    document.getElementById('loginOtpWrap').style.display='none';
     document.getElementById('loginFormWrap').style.display='block';
 }
 async function submitAdminRequest() {
