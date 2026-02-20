@@ -115,7 +115,7 @@ button { cursor: pointer; font-family: inherit; }
 .card.hidden { display: none; }
 @keyframes fadeUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 .card:hover { border-color: rgba(255,255,255,0.11); }
-.card-inner { overflow: hidden; border-radius: var(--radius); }
+.card-inner { overflow: visible; border-radius: var(--radius); }
 
 .card-header { display: flex; align-items: flex-start; padding: 13px 13px 0; gap: 9px; }
 .card-avatar {
@@ -144,9 +144,9 @@ button { cursor: pointer; font-family: inherit; }
 .status-waiting { background: rgba(138,143,158,0.1); color: var(--waiting); border: 1px solid rgba(138,143,158,0.18); }
 .status-recovered { background: rgba(232,168,56,0.12); color: var(--recovered); border: 1px solid rgba(232,168,56,0.25); }
 
-.card-title { padding: 9px 13px 3px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; line-height: 1.3; }
+.card-title { padding: 9px 13px 4px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; line-height: 1.45; overflow: visible; }
 .card-desc { padding: 0 13px 9px; font-size: 13px; color: #9ba1b0; line-height: 1.55; }
-.card-image { margin: 0 13px 9px; border-radius: 10px; overflow: hidden; aspect-ratio: 16/9; background: var(--surface2); position: relative; }
+.card-image { margin: 0; border-radius: 0; overflow: hidden; background: var(--surface2); }
 .img-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 42px; }
 .img-p1 { background: linear-gradient(135deg,#1a2340,#2a3560); }
 .img-p2 { background: linear-gradient(135deg,#1a2a1e,#1e3a26); }
@@ -434,3 +434,10 @@ button { cursor: pointer; font-family: inherit; }
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+/* ── CARD HIGHLIGHT (after navigating from profile) ── */
+@keyframes highlightPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(91,141,255,0.5); }
+    50%  { box-shadow: 0 0 0 8px rgba(91,141,255,0.15); }
+    100% { box-shadow: 0 0 0 0 rgba(91,141,255,0); }
+}
+.card-highlight { animation: highlightPulse 1.8s ease-out; }
