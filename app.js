@@ -60,8 +60,12 @@ function statusLabel(s) {
 
 function buildCard(post) {
     const isOwner = App.isLoggedIn && (post.owner === App.currentUser?.uid || App.isAdmin);
-    const imgHtml = post.hasImage
-        ? `<div class="card-image"><div class="img-placeholder ${post.imgClass}">${post.imgEmoji}</div></div>` : '';
+    let imgHtml = '';
+    if (post._imageUrl) {
+        imgHtml = `<div class="card-image"><img src="${post._imageUrl}" style="width:100%;border-radius:8px;max-height:220px;object-fit:cover;display:block"></div>`;
+    } else if (post.hasImage) {
+        imgHtml = `<div class="card-image"><div class="img-placeholder ${post.imgClass}">${post.imgEmoji}</div></div>`;
+    }
 
     const dotsMenu = isOwner ? `
     <div class="card-menu" id="menu-${post.id}">
@@ -323,16 +327,121 @@ function openLocation(name) {
 function closeLocation() { closeSheet('locSheet','locOverlay'); }
 
 // ── POST ──────────────────────────────────────────────────────────────────────
+let postImageDataUrl = null; // holds base64 image chosen by user
+
 function tryPost() {
     if (!App.isLoggedIn) {
         document.getElementById('signinReqModal').classList.add('open');
         document.body.style.overflow='hidden'; return;
     }
+    // reset form
+    document.getElementById('postTitle').value='';
+    document.getElementById('postDesc').value='';
+    clearImage();
     document.getElementById('postModal').classList.add('open');
     document.body.style.overflow='hidden';
 }
-function closePost() { document.getElementById('postModal').classList.remove('open'); document.body.style.overflow=''; }
+function closePost() {
+    document.getElementById('postModal').classList.remove('open');
+    document.body.style.overflow='';
+}
 function closeSigninReq() { document.getElementById('signinReqModal').classList.remove('open'); document.body.style.overflow=''; }
+
+// ── IMAGE HELPERS ─────────────────────────────────────────────────────────────
+function handleImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = e => showImagePreview(e.target.result);
+    reader.readAsDataURL(file);
+}
+function handleImageDrop(e) {
+    e.preventDefault();
+    document.getElementById('uploadArea').classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) handleImageFile(file);
+}
+function showImagePreview(dataUrl) {
+    postImageDataUrl = dataUrl;
+    document.getElementById('uploadPlaceholder').style.display='none';
+    document.getElementById('uploadPreviewWrap').style.display='block';
+    document.getElementById('uploadPreview').src=dataUrl;
+}
+function clearImage() {
+    postImageDataUrl = null;
+    document.getElementById('uploadPlaceholder').style.display='';
+    document.getElementById('uploadPreviewWrap').style.display='none';
+    document.getElementById('uploadPreview').src='';
+    document.getElementById('postImageInput').value='';
+}
+
+// Listen for paste anywhere on the page (when post modal is open)
+document.addEventListener('paste', e => {
+    if (!document.getElementById('postModal').classList.contains('open')) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+        if (item.type.startsWith('image/')) {
+            handleImageFile(item.getAsFile());
+            break;
+        }
+    }
+});
+
+// ── SUBMIT POST ───────────────────────────────────────────────────────────────
+async function submitPost() {
+    if (!App.isLoggedIn) return;
+    const title    = document.getElementById('postTitle').value.trim();
+    const desc     = document.getElementById('postDesc').value.trim();
+    const location = document.getElementById('postLocation').value;
+    const category = document.getElementById('postCategory').value;
+    const status   = document.getElementById('postStatus').value;
+
+    if (!title) {
+        document.getElementById('postTitle').focus();
+        showToast('Please enter a title'); return;
+    }
+
+    const btn = document.getElementById('postSubmitBtn');
+    btn.disabled = true; btn.textContent = 'Posting…';
+
+    // Build local post object to show immediately
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    const newPost = {
+        id:         Date.now(),
+        owner:      App.currentUser.uid,
+        ownerName:  App.currentUser.name,
+        ownerInitials: App.currentUser.initials,
+        ownerColor: App.currentUser.color,
+        title, desc, location, category, status,
+        date:       dateStr,
+        comments:   0,
+        hasImage:   !!postImageDataUrl,
+        imgEmoji:   '',
+        imgClass:   '',
+        _imageUrl:  postImageDataUrl || null,
+    };
+
+    // Save to Supabase (fire and don't block)
+    if (USE_SUPABASE) {
+        sb.createPost({
+            owner_id:    App.currentUser.id,
+            title,
+            description: desc,
+            location,
+            category,
+            status,
+        }).catch(console.error);
+    }
+
+    // Add to local feed immediately
+    POSTS.unshift(newPost);
+    closePost();
+    renderFeed();
+    showToast('✅ Post published!');
+
+    btn.disabled = false; btn.textContent = 'Post';
+}
 
 // ── EDIT ──────────────────────────────────────────────────────────────────────
 let editingPostId=null, editSelectedStatus=null;
