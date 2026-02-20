@@ -101,6 +101,38 @@ const sb = (() => {
         return api(`/rest/v1/posts_with_author?author_id=eq.${profileId}&is_deleted=eq.false&order=created_at.desc`) || [];
     }
 
+    // ── STORAGE ───────────────────────────────────────────────────────────────
+    // Upload a base64 dataURL to Supabase Storage, return public URL
+    async function uploadImage(dataUrl, folder = 'posts') {
+        // Convert base64 to binary blob
+        const [meta, b64] = dataUrl.split(',');
+        const mime = meta.match(/:(.*?);/)[1];
+        const ext  = mime.split('/')[1].replace('jpeg','jpg');
+        const bin  = atob(b64);
+        const arr  = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        const blob = new Blob([arr], { type: mime });
+
+        const filename = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+        const r = await fetch(`${SUPABASE_URL}/storage/v1/object/images/${filename}`, {
+            method: 'POST',
+            headers: {
+                apikey: SUPABASE_ANON,
+                Authorization: `Bearer ${_token || SUPABASE_ANON}`,
+                'Content-Type': mime,
+                'x-upsert': 'true',
+            },
+            body: blob,
+        });
+        if (!r.ok) {
+            const err = await r.json().catch(() => ({}));
+            console.error('Storage upload error', r.status, err);
+            return null;
+        }
+        return `${SUPABASE_URL}/storage/v1/object/public/images/${filename}`;
+    }
+
     // ── POSTS ─────────────────────────────────────────────────────────────────
     async function getPosts() {
         return api('/rest/v1/posts_with_author?order=created_at.desc') || [];
@@ -133,9 +165,10 @@ const sb = (() => {
         ) || [];
     }
 
-    async function createComment(postId, body, parentId = null) {
+    async function createComment(postId, body, parentId = null, imageUrl = null) {
         const payload = { post_id: postId, body };
         if (parentId) payload.parent_id = parentId;
+        if (imageUrl) payload.image_url = imageUrl;
         return api('/rest/v1/comments', {
             method: 'POST',
             headers: { Prefer: 'return=representation' },
@@ -194,6 +227,7 @@ const sb = (() => {
     return {
         sendMagicLink, handleCallback, restoreSession, signOut,
         getMe, getAllUsers, updateProfile, getProfileStats, getPostsByUser,
+        uploadImage,
         getPosts, createPost, updatePost, deletePost,
         getComments, createComment,
         submitAdminRequest, getPendingRequests, reviewRequest,
