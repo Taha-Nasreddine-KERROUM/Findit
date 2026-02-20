@@ -94,11 +94,21 @@
         </div>
     </div>
     <div class="comments-scroll" id="commentsScroll"></div>
-    <div id="commentInputWrap" class="comment-input-wrap">
-        <input class="comment-input" id="commentInput" placeholder="Write a comment…" onkeydown="if(event.key==='Enter')submitCommentClick()">
-        <button class="send-btn" onclick="submitCommentClick()">
-            <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
+    <div id="commentInputWrap" class="comment-input-wrap" style="flex-direction:column;gap:0">
+        <div id="commentImagePreviewWrap" style="display:none;align-items:center;gap:8px;padding:8px 12px 0;position:relative">
+            <img id="commentImagePreview" style="max-height:80px;border-radius:6px;display:block">
+            <button onclick="clearCommentImage()" style="background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;font-size:11px;line-height:1;flex-shrink:0">✕</button>
+        </div>
+        <div style="display:flex;align-items:center">
+            <input type="file" id="commentImageInput" accept="image/*" style="display:none" onchange="handleCommentImageFile(this.files[0])">
+            <button class="action-btn" onclick="document.getElementById('commentImageInput').click()" style="padding:0 10px;flex-shrink:0" title="Attach image">
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </button>
+            <input class="comment-input" id="commentInput" placeholder="Write a comment…" onkeydown="if(event.key==='Enter')submitCommentClick()" style="flex:1">
+            <button class="send-btn" onclick="submitCommentClick()">
+                <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+        </div>
     </div>
     <div id="commentLoginPrompt" style="display:none;padding:12px 16px;border-top:1px solid var(--border);text-align:center">
         <span style="font-size:13px;color:var(--muted)">
@@ -245,6 +255,21 @@
                 <div class="status-opt" data-status="lost" onclick="selectStatus(this,'lost')">Lost</div>
                 <div class="status-opt" data-status="waiting" onclick="selectStatus(this,'waiting')">Waiting</div>
                 <div class="status-opt" data-status="recovered" onclick="selectStatus(this,'recovered')">Recovered</div>
+            </div>
+        </div>
+        <!-- Image upload in edit modal -->
+        <div class="form-group" style="margin-bottom:12px">
+            <label class="form-label">Photo <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+            <div class="upload-area" id="editUploadArea" onclick="document.getElementById('editImageInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="event.preventDefault();this.classList.remove('drag-over');handleEditImageFile(event.dataTransfer.files[0])">
+                <input type="file" id="editImageInput" accept="image/*" style="display:none" onchange="handleEditImageFile(this.files[0])">
+                <div id="editUploadPlaceholder">
+                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom:4px;opacity:0.4"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    <div class="upload-text">Click to change photo</div>
+                </div>
+                <div id="editUploadPreviewWrap" style="display:none;position:relative">
+                    <img id="editImagePreview" style="width:100%;border-radius:8px;display:block;height:auto">
+                    <button onclick="event.stopPropagation();clearEditImage()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:13px;line-height:1">✕</button>
+                </div>
             </div>
         </div>
         <div class="modal-actions">
