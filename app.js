@@ -740,93 +740,99 @@ function openAdminDashboard() { toggleMenu(); window.open('admin.html','_blank')
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 function openLogin() {
     document.getElementById('menuDropdown').classList.remove('open');
-    document.getElementById('loginFormWrap').style.display='';
-    document.getElementById('loginOtpWrap').style.display='none';
-    document.getElementById('loginSent').style.display='none';
+    document.getElementById('loginMainWrap').style.display='';
     document.getElementById('adminRequestWrap').style.display='none';
     document.getElementById('adminRequestSent').style.display='none';
-    document.getElementById('loginEmail').value='';
-    document.getElementById('loginEmail').style.borderColor='';
+    document.getElementById('loginError').style.display='none';
+    document.getElementById('registerError').style.display='none';
+    document.getElementById('loginUid').value='';
+    document.getElementById('loginPw').value='';
+    document.getElementById('regName').value='';
+    document.getElementById('regUid').value='';
+    document.getElementById('regPw').value='';
+    document.getElementById('loginPw').value='';
+    document.getElementById('regName').value='';
+    document.getElementById('regUid').value='';
+    document.getElementById('regPw').value='';
+    switchLoginTab('login');
     document.getElementById('loginModal').classList.add('open');
     document.body.style.overflow='hidden';
 }
-function closeLogin() { document.getElementById('loginModal').classList.remove('open'); document.body.style.overflow=''; }
-
-let _otpEmail = '';
-
-async function sendMagicLink() {
-    const email = document.getElementById('loginEmail').value.trim();
-    if (!email || !email.includes('@')) {
-        document.getElementById('loginEmail').style.borderColor='rgba(224,90,90,0.5)';
-        document.getElementById('loginEmail').focus(); return;
-    }
-    const btn = document.querySelector('#loginFormWrap .btn-full.btn-submit');
-    if (btn) { btn.textContent='Sending…'; btn.disabled=true; }
-
-    const res = await sb.requestOtp(email);
-
-    if (btn) { btn.textContent='Send sign-in code'; btn.disabled=false; }
-    if (!res || !res.code) { showToast('Could not reach server. Try again.'); return; }
-
-    _otpEmail = email;
-    // Show the code right in the UI
-    document.getElementById('loginFormWrap').style.display='none';
-    document.getElementById('loginOtpWrap').style.display='block';
-    document.getElementById('otpCodeDisplay').textContent = res.code;
-    document.getElementById('otpInput').value='';
-    document.getElementById('otpInput').focus();
+function switchLoginTab(tab) {
+    const isLogin = tab === 'login';
+    document.getElementById('loginTab').style.display    = isLogin ? '' : 'none';
+    document.getElementById('registerTab').style.display = isLogin ? 'none' : '';
+    document.getElementById('tabLoginBtn').style.background    = isLogin ? 'var(--surface)' : 'transparent';
+    document.getElementById('tabLoginBtn').style.color         = isLogin ? 'var(--text)' : 'var(--muted)';
+    document.getElementById('tabRegisterBtn').style.background = isLogin ? 'transparent' : 'var(--surface)';
+    document.getElementById('tabRegisterBtn').style.color      = isLogin ? 'var(--muted)' : 'var(--text)';
+    document.getElementById('loginError').style.display    = 'none';
+    document.getElementById('registerError').style.display = 'none';
 }
 
-async function verifyOtp() {
-    const code = document.getElementById('otpInput').value.trim();
-    if (!code) { document.getElementById('otpInput').focus(); return; }
-    const btn = document.getElementById('otpVerifyBtn');
-    btn.textContent='Verifying…'; btn.disabled=true;
+function showAdminRequest() {
+    document.getElementById('loginMainWrap').style.display = 'none';
+    document.getElementById('adminRequestWrap').style.display = 'block';
+}
 
-    const res = await sb.verifyOtp(_otpEmail, code);
-    btn.textContent='Sign in'; btn.disabled=false;
-
-    if (!res || !res.token) {
-        showToast(res === null ? 'Server error' : 'Wrong or expired code');
-        return;
+async function doLogin() {
+    const uid = document.getElementById('loginUid').value.trim();
+    const pw  = document.getElementById('loginPw').value;
+    const err = document.getElementById('loginError');
+    err.style.display = 'none';
+    if (!uid || !pw) { err.textContent='Enter username and password'; err.style.display=''; return; }
+    const btn = document.getElementById('loginBtn');
+    btn.textContent='Logging in…'; btn.disabled=true;
+    const res = await sb.login(uid, pw);
+    btn.textContent='Log in'; btn.disabled=false;
+    if (!res || res._error) {
+        err.textContent = res?._error || 'Could not reach server';
+        err.style.display=''; return;
     }
+    await afterAuth(res);
+}
+
+async function doRegister() {
+    const name = document.getElementById('regName').value.trim();
+    const uid  = document.getElementById('regUid').value.trim();
+    const pw   = document.getElementById('regPw').value;
+    const err  = document.getElementById('registerError');
+    err.style.display = 'none';
+    if (!uid || !pw) { err.textContent='Fill in all fields'; err.style.display=''; return; }
+    const btn = document.getElementById('registerBtn');
+    btn.textContent='Creating…'; btn.disabled=true;
+    const res = await sb.register(uid, pw, name || uid);
+    btn.textContent='Create account'; btn.disabled=false;
+    if (!res || res._error) {
+        err.textContent = res?._error || 'Could not reach server';
+        err.style.display=''; return;
+    }
+    await afterAuth(res);
+}
+
+async function afterAuth(res) {
     setUser(res);
     closeLogin();
     updateMenuState();
-    // Reload posts now that we're logged in
     const rows = await sb.getPosts();
     POSTS = (rows || []).map(mapRow);
     renderFeed();
-    showToast('Signed in!');
+    showToast('Welcome, ' + App.currentUser.uid + '!');
 }
+
+// kept for compat
+async function sendMagicLink() {}
+async function verifyOtp() {}
+function closeLogin() { document.getElementById('loginModal').classList.remove('open'); document.body.style.overflow=''; }
 
 // ── ADMIN REQUEST FORM ────────────────────────────────────────────────────────
-function contactAdmin() {
-    document.getElementById('loginFormWrap').style.display='none';
-    document.getElementById('adminRequestWrap').style.display='block';
-}
+function contactAdmin() { showAdminRequest(); }
 function backToLogin() {
     document.getElementById('adminRequestWrap').style.display='none';
-    document.getElementById('loginFormWrap').style.display='block';
+    document.getElementById('adminRequestSent').style.display='none';
+    document.getElementById('loginMainWrap').style.display='';
 }
-function backToEmailStep() {
-    document.getElementById('loginOtpWrap').style.display='none';
-    document.getElementById('loginFormWrap').style.display='block';
-}
-async function submitAdminRequest() {
-    const name      = document.getElementById('arName').value.trim();
-    const roleTitle = document.getElementById('arRole').value.trim();
-    const reason    = document.getElementById('arReason').value.trim();
-    const email     = document.getElementById('arEmail').value.trim();
-    if (!name||!roleTitle||!reason||!email) { showToast('Please fill in all fields'); return; }
-    if (USE_SUPABASE && App.isLoggedIn) {
-        await sb.submitAdminRequest({ user_id: App.currentUser.id, email, name, role_title: roleTitle, reason });
-    }
-    document.getElementById('adminRequestWrap').style.display='none';
-    document.getElementById('adminRequestSent').style.display='block';
-}
-
-// ── SHARE ─────────────────────────────────────────────────────────────────────
+function backToEmailStep() { backToLogin(); }
 function shareItem(btn) {
     const orig=btn.innerHTML;
     navigator.clipboard?.writeText(window.location.href);
