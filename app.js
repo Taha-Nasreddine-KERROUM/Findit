@@ -296,7 +296,7 @@ function buildCommentHtml(c, byParent) {
       <div class="comment-body">
         <div class="comment-user">u/${uid}</div>
         <div class="comment-text">${escHtml(c.body)}</div>
-        ${c.image_url ? `<img src="${c.image_url}" style="max-width:100%;border-radius:8px;margin-top:6px;display:block">` : ''}
+        ${c.image_url ? `<img src="${c.image_url}" style="max-width:160px;max-height:120px;border-radius:8px;margin-top:6px;display:block;object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'160px':'100%';this.style.maxHeight=this.style.maxHeight==='none'?'120px':'none'">` : ''}
         <div class="comment-meta">
           <span class="comment-time">${time}</span>
           ${App.isLoggedIn ? `<button class="reply-btn" onclick="toggleReply(this,'${c.id}')">Reply</button>` : ''}
