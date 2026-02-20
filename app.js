@@ -735,7 +735,7 @@ async function confirmDelete() {
 }
 
 // ── ADMIN LINK ────────────────────────────────────────────────────────────────
-function openAdminDashboard() { toggleMenu(); window.open('admin.html','_blank'); }
+function openAdminDashboard() { toggleMenu(); window.location.href='admin.html'; }
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 function openLogin() {
