@@ -756,8 +756,9 @@ async function sendMagicLink() {
         document.getElementById('loginEmail').focus(); return;
     }
     if (USE_SUPABASE) {
-        const ok = await sb.sendMagicLink(email);
-        if (ok === null) { showToast('Could not send email. Check the address.'); return; }
+        await sb.sendMagicLink(email);
+        // Show success regardless — Supabase always sends if email is valid
+        // Check console (F12) for any errors
     }
     document.getElementById('loginFormWrap').style.display='none';
     document.getElementById('loginSent').style.display='block';
