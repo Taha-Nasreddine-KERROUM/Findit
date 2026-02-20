@@ -672,7 +672,7 @@ async function sendMagicLink() {
     }
     if (USE_SUPABASE) {
         const ok = await sb.sendMagicLink(email);
-        if (!ok) { showToast('Could not send email. Check the address.'); return; }
+        if (ok === null) { showToast('Could not send email. Check the address.'); return; }
     }
     document.getElementById('loginFormWrap').style.display='none';
     document.getElementById('loginSent').style.display='block';
