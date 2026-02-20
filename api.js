@@ -4,7 +4,7 @@
 //  Replace API_URL with your actual HF Space URL once deployed.
 // ============================================================
 
-const API_URL = 'https://YOUR-USERNAME-findit-backend.hf.space';
+const API_URL = 'https://TiH0-findit-backend.hf.space';
 
 const sb = (() => {
     let _token = localStorage.getItem('fi_token') || null;
