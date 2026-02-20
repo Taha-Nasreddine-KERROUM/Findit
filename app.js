@@ -41,17 +41,18 @@ function mapRow(r) {
     const dateStr = d.toLocaleDateString('en-GB', {day:'numeric', month:'short'});
     return {
         id:            r.id,
-        owner:         r.owner_uid  || r.uid || '',
-        ownerName:     r.owner_name || r.name || '',
-        ownerInitials: r.owner_initials || r.initials || '?',
-        ownerColor:    r.owner_color  || r.color || '#5b8dff',
+        // view uses author_* prefix — fall back for locally-constructed objects
+        owner:         r.author_uid      || r.owner_uid  || r.uid || '',
+        ownerName:     r.author_name     || r.owner_name || r.name || '',
+        ownerInitials: r.author_initials || r.owner_initials || r.initials || '?',
+        ownerColor:    r.author_color    || r.owner_color || r.color || '#5b8dff',
         title:         r.title || '',
         desc:          r.description || '',
         location:      r.location || '',
         category:      r.category || '',
         status:        r.status || 'found',
         date:          dateStr,
-        comments:      r.comment_count || 0,
+        comments:      Number(r.comment_count) || 0,
         hasImage:      !!r.image_url,
         imgEmoji:      '',
         imgClass:      '',
@@ -453,7 +454,7 @@ async function submitPost() {
         // Save to Supabase in background so everyone sees it
         if (USE_SUPABASE) {
             const saved = await sb.createPost({
-                owner_id:    App.currentUser.id,
+                author_id:   App.currentUser.id,   // matches DB column name
                 title,
                 description: desc,
                 location,
@@ -463,14 +464,15 @@ async function submitPost() {
             // Replace temp post with real Supabase row (has real id, etc.)
             if (saved && saved[0]) {
                 const realPost = mapRow({ ...saved[0],
-                    owner_uid:      App.currentUser.uid,
-                    owner_name:     App.currentUser.name,
-                    owner_initials: App.currentUser.initials,
-                    owner_color:    App.currentUser.color,
-                    image_url:      postImageDataUrl || null,
+                    author_uid:      App.currentUser.uid,
+                    author_name:     App.currentUser.name,
+                    author_initials: App.currentUser.initials,
+                    author_color:    App.currentUser.color,
+                    image_url:       postImageDataUrl || null,
                 });
                 const idx = POSTS.findIndex(p => p.id === tempId);
                 if (idx > -1) POSTS[idx] = realPost;
+                renderFeed(); // re-render so real ID replaces temp ID
             }
         }
 
