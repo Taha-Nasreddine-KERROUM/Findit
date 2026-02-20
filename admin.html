@@ -214,31 +214,6 @@
 </head>
 <body>
 
-<!-- ── AUTH GATE ── -->
-<div id="authGate">
-  <div class="gate-box">
-    <div class="gate-logo">FindIt</div>
-    <div class="gate-sub">Admin Dashboard — sign in to continue</div>
-    <div id="gateForm">
-      <input class="gate-email" type="email" id="gateEmail" placeholder="your@university.edu" onkeydown="if(event.key==='Enter')gateSignIn()">
-      <div class="gate-err" id="gateErr">Please enter a valid email</div>
-      <button class="gate-btn" onclick="gateSignIn()">Send sign-in link</button>
-      <div class="gate-note">We'll email you a link. Admin access is checked after sign-in.</div>
-    </div>
-    <div class="gate-sent" id="gateSent">
-      <div class="gate-sent-icon">📬</div>
-      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;margin-bottom:8px">Check your inbox</div>
-      <div class="gate-note" id="gateSentMsg"></div>
-    </div>
-    <div id="gateAccessDenied" style="display:none">
-      <div style="font-size:32px;margin-bottom:10px">🚫</div>
-      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;margin-bottom:8px">Access Denied</div>
-      <div class="gate-note">Your account does not have admin privileges. Contact a super admin to request access.</div>
-      <button class="gate-btn" style="margin-top:16px" onclick="gateReset()">Try another account</button>
-    </div>
-  </div>
-</div>
-
 <!-- ── APP SHELL ── -->
 <div id="appShell" style="display:none;width:100%">
 
@@ -401,7 +376,7 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="supabase.js"></script>
+<script src="api.js"></script>
 <script>
   // ── STATE ──────────────────────────────────────────────────────────────────────
   let ME = null;
@@ -412,59 +387,30 @@
 
   // ── BOOT ──────────────────────────────────────────────────────────────────────
   (async () => {
-    const me = await sb.handleCallback();
-    if (me) return boot(me);
-    const restored = await sb.restoreSession();
-    if (restored) return boot(restored);
-    // show login gate
+    const me = await sb.restoreSession();
+    if (!me) { window.location.href = 'index.html'; return; }
+    const role = me.profile?.role || me.role;
+    if (!['admin','super_admin'].includes(role)) {
+      window.location.href = 'index.html'; return;
+    }
+    boot(me);
   })();
 
-  async function boot(me) {
+  function boot(me) {
     ME = me;
-    const role = me.profile.role;
-    if (!['admin','super_admin'].includes(role)) {
-      document.getElementById('gateForm').style.display = 'none';
-      document.getElementById('gateSent').style.display = 'none';
-      document.getElementById('gateAccessDenied').style.display = 'block';
-      return;
-    }
-    // hide gate, show app
-    document.getElementById('authGate').style.display = 'none';
+    const profile = me.profile || me;
+    const role = profile.role;
     document.getElementById('appShell').style.display = 'flex';
-    // fill sidebar user info
-    document.getElementById('sideAvatar').style.background = me.profile.color;
-    document.getElementById('sideAvatar').textContent = me.profile.initials;
-    document.getElementById('sideName').textContent = me.profile.name;
+    document.getElementById('sideAvatar').style.background = profile.color;
+    document.getElementById('sideAvatar').textContent = profile.initials;
+    document.getElementById('sideName').textContent = profile.name;
     document.getElementById('sideRole').textContent = role === 'super_admin' ? 'Super Admin' : 'Admin';
-    // load overview
     loadOverview();
   }
 
-  // ── AUTH GATE ─────────────────────────────────────────────────────────────────
-  async function gateSignIn() {
-    const email = document.getElementById('gateEmail').value.trim();
-    const errEl = document.getElementById('gateErr');
-    if (!email || !email.includes('@')) { errEl.style.display='block'; return; }
-    errEl.style.display = 'none';
-    const ok = await sb.sendMagicLink(email);
-    if (ok) {
-      document.getElementById('gateForm').style.display = 'none';
-      document.getElementById('gateSent').style.display = 'block';
-      document.getElementById('gateSentMsg').textContent = `We sent a sign-in link to ${email}. Click it to continue. If your account has admin rights, you'll be brought here automatically.`;
-    } else {
-      errEl.textContent = 'Something went wrong. Check your email address.';
-      errEl.style.display = 'block';
-    }
-  }
-  function gateReset() {
-    document.getElementById('gateAccessDenied').style.display = 'none';
-    document.getElementById('gateForm').style.display = 'block';
-    document.getElementById('gateEmail').value = '';
-    sb.signOut();
-  }
   async function adminSignOut() {
     await sb.signOut();
-    location.reload();
+    window.location.href = 'index.html';
   }
 
   // ── NAVIGATION ────────────────────────────────────────────────────────────────
