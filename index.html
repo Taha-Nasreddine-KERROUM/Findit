@@ -72,7 +72,7 @@
 
 <!-- ── FAB ── -->
 <div class="fab-island">
-    <button class="fab-dm" onclick="tryDM()" title="Messages">
+    <button class="fab-dm" onclick="openDMSheet()" title="Messages">
         <svg width="17" height="17" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
@@ -157,18 +157,36 @@
 
 
 <!-- ── DM SHEET ── -->
-<div class="dm-sheet" id="dmSheet"><div class="sheet-drag-handle" onmousedown="startDrag(event,'dmSheet')" ontouchstart="startDrag(event,'dmSheet')"><div class="drag-pill"></div></div>
-    <div class="dm-header">
-        <div class="dm-avatar" id="dmAvatar" style="background:#4da6ff">AB</div>
-        <div><div class="dm-name" id="dmName">Amir B.</div><div class="dm-online">online</div></div>
-        <button class="dm-close" onclick="closeDM()">✕</button>
+<div class="dm-sheet" id="dmSheet">
+    <div class="sheet-drag-handle" onmousedown="startDrag(event,'dmSheet')" ontouchstart="startDrag(event,'dmSheet')"><div class="drag-pill"></div></div>
+
+    <!-- ── INBOX VIEW ── -->
+    <div id="dmInbox">
+        <div class="dm-header">
+            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;flex:1">Messages</div>
+            <div id="dmUnreadBadge" style="display:none;background:var(--accent);color:#fff;border-radius:50%;width:20px;height:20px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-right:8px"></div>
+            <button class="dm-close" onclick="closeDM()">✕</button>
+        </div>
+        <div id="dmConvoList" style="overflow-y:auto;flex:1;padding:8px 0">
+            <div style="text-align:center;padding:32px 0;color:var(--muted);font-size:13px">Loading…</div>
+        </div>
     </div>
-    <div class="dm-messages" id="dmMessages"></div>
-    <div class="dm-input-wrap">
-        <input class="dm-input" placeholder="Message…" id="dmInput" onkeydown="if(event.key==='Enter')sendDMClick()">
-        <button class="send-btn" onclick="sendDMClick()">
-            <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
+
+    <!-- ── THREAD VIEW ── -->
+    <div id="dmThread" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="dm-header">
+            <button onclick="showDMInbox()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 8px 0 0;line-height:1">‹</button>
+            <div class="dm-avatar" id="dmAvatar" style="background:#4da6ff">AB</div>
+            <div style="flex:1"><div class="dm-name" id="dmName">User</div></div>
+            <button class="dm-close" onclick="closeDM()">✕</button>
+        </div>
+        <div class="dm-messages" id="dmMessages"></div>
+        <div class="dm-input-wrap">
+            <input class="dm-input" placeholder="Message…" id="dmInput" onkeydown="if(event.key==='Enter')sendDMClick()">
+            <button class="send-btn" onclick="sendDMClick()">
+                <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+        </div>
     </div>
 </div>
 
