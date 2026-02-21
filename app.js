@@ -980,20 +980,33 @@ function shareItem(btn) {
     btn.textContent='Copied'; setTimeout(()=>btn.innerHTML=orig,1600);
 }
 
+// ── ADMIN REQUEST MODAL ──────────────────────────────────────────────────────
+function openAdminRequestModal() {
+    document.getElementById('menuDropdown').classList.remove('open');
+    document.getElementById('adminReqModal').classList.add('open');
+    document.getElementById('adminReqSent').style.display = 'none';
+    document.getElementById('adminReqForm').style.display = '';
+    document.body.style.overflow = 'hidden';
+}
+function closeAdminReqModal() {
+    document.getElementById('adminReqModal').classList.remove('open');
+    document.body.style.overflow = '';
+}
+
 // ── ADMIN REQUEST ────────────────────────────────────────────────────────────
 async function submitAdminRequest() {
     const name      = document.getElementById('arName').value.trim();
+    const uid       = document.getElementById('arUid')?.value.trim() || App.currentUser?.uid || '';
     const roleTitle = document.getElementById('arRole').value.trim();
     const reason    = document.getElementById('arReason').value.trim();
     if (!name || !roleTitle || !reason) { showToast('Please fill in all fields'); return; }
-    if (!App.isLoggedIn) { closeLogin(); openLogin(); return; }
-    const btn = document.querySelector('#adminRequestWrap .btn-full.btn-submit');
+    const btn = document.getElementById('adminReqBtn');
     if (btn) { btn.textContent = 'Sending…'; btn.disabled = true; }
-    const res = await sb.submitAdminRequest({ name, role_title: roleTitle, reason, email: App.currentUser.uid });
+    const res = await sb.submitAdminRequest({ name, uid, role_title: roleTitle, reason, email: uid });
     if (btn) { btn.textContent = 'Submit Request'; btn.disabled = false; }
     if (!res || res._error) { showToast('Could not send request. Try again.'); return; }
-    document.getElementById('adminRequestWrap').style.display = 'none';
-    document.getElementById('adminRequestSent').style.display = 'block';
+    document.getElementById('adminReqForm').style.display = 'none';
+    document.getElementById('adminReqSent').style.display = 'block';
 }
 
 // ── TOAST ─────────────────────────────────────────────────────────────────────
