@@ -78,24 +78,29 @@ function statusLabel(s) {
 
 function buildCard(post) {
     const isOwner = App.isLoggedIn && (post.owner === App.currentUser?.uid || App.isAdmin);
+    const canReport = App.isLoggedIn && !App.isAdmin && post.owner !== App.currentUser?.uid;
     let imgHtml = '';
     if (post._imageUrl) {
         imgHtml = `<div class="card-image"><img src="${post._imageUrl}" style="width:100%;display:block;height:auto;border-radius:0"></div>`;
     }
 
-    const dotsMenu = isOwner ? `
+    // owner/admin menu
+    const ownerMenuItems = App.isSuperAdmin
+        ? `<div class="card-menu-item" onclick="openEdit('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit post</div><div class="card-menu-sep"></div><div class="card-menu-item danger" onclick="openConfirm('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>Delete post</div>`
+        : post.owner === App.currentUser?.uid
+            ? `<div class="card-menu-item" onclick="openEdit('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit post</div><div class="card-menu-sep"></div><div class="card-menu-item danger" onclick="openConfirm('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>Delete post</div>`
+            : `<div class="card-menu-item danger" onclick="openConfirm('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>Delete post</div>`;
+    // member report menu
+    const reportMenuItem = canReport
+        ? `<div class="card-menu-item danger" onclick="openReport('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>Report post</div>`
+        : '';
+    const dotsMenu = (isOwner || canReport) ? `
     <div class="card-menu" id="menu-${post.id}">
-      <div class="card-menu-item" onclick="openEdit('${post.id}');closeCardMenu('${post.id}')">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        Edit post
-      </div>
-      <div class="card-menu-sep"></div>
-      <div class="card-menu-item danger" onclick="openConfirm('${post.id}');closeCardMenu('${post.id}')">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
-        Delete post
-      </div>
+      ${isOwner ? ownerMenuItems : ''}
+      ${isOwner && canReport ? '<div class="card-menu-sep"></div>' : ''}
+      ${reportMenuItem}
     </div>` : '';
-    const dotsBtn = isOwner
+    const dotsBtn = (isOwner || canReport)
         ? `<button class="dots-btn" onclick="toggleCardMenu(event,'${post.id}')" title="More options">•••</button>` : '';
 
     // Escape for safe use in onclick strings
@@ -116,7 +121,7 @@ function buildCard(post) {
              onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">${post.ownerInitials}</div>
         <div class="card-meta">
           <span class="location-tag" onclick="openLocation('${safeLocation}')">${post.location}</span>
-          <span class="username" onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">u/${post.owner}</span>
+          <span class="username" onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">u/${post.owner}${post.ownerRole==='super_admin'?'<span class="badge-verified gold" title="Super Admin">✓</span>':post.ownerRole==='admin'?'<span class="badge-verified purple" title="Admin">✓</span>':''}</span>
         </div>
         <div class="card-right">
           <div class="card-status-row">
@@ -387,6 +392,9 @@ async function openProfile(name, initials, color, uid, profileId) {
     document.getElementById('pAvatar').textContent      = initials;
     document.getElementById('pName').textContent        = name;
     document.getElementById('pHandle').textContent      = 'u/' + uid;
+    // clear verified badge until stats load
+    const pVerified = document.getElementById('pVerifiedBadge');
+    if (pVerified) pVerified.innerHTML = '';
     document.getElementById('pPoints').textContent      = '…';
     document.getElementById('pStatPosted').textContent  = '…';
     document.getElementById('pStatReturned').textContent= '…';
@@ -415,10 +423,34 @@ async function openProfile(name, initials, color, uid, profileId) {
     }
 
     document.getElementById('pPoints').textContent       = stats.points + ' pts';
+    // set verified badge
+    const pvb = document.getElementById('pVerifiedBadge');
+    if (pvb) {
+        const r = stats.role;
+        pvb.innerHTML = r === 'super_admin'
+            ? '<span class="badge-verified gold" title="Super Admin" style="margin-left:5px">✓</span>'
+            : r === 'admin'
+            ? '<span class="badge-verified purple" title="Admin" style="margin-left:5px">✓</span>'
+            : '';
+    }
     document.getElementById('pStatPosted').textContent   = stats.postCount;
     document.getElementById('pStatReturned').textContent = (posts || []).filter(p => p.status === 'recovered').length;
     const commentsEl = document.getElementById('pStatComments');
     if (commentsEl) commentsEl.textContent = stats.commentCount;
+
+    // Show alert count — admin eyes only, non-admin users only
+    const alertWrap = document.getElementById('pAlertWrap');
+    if (alertWrap) {
+        const targetIsAdmin = ['admin','super_admin'].includes(stats.role || '');
+        if (App.isAdmin && !targetIsAdmin) {
+            const alertData = await sb.getAlerts(uid);
+            const count = alertData?.count || 0;
+            alertWrap.style.display = '';
+            alertWrap.innerHTML = `<span style="font-size:11px;font-weight:600;color:${count>=3?'var(--danger)':count>0?'var(--recovered)':'var(--muted)'}">⚠ ${count} alert${count!==1?'s':''} (active)</span>`;
+        } else {
+            alertWrap.style.display = 'none';
+        }
+    }
 
     const list = document.getElementById('profileHistoryList');
     if (!posts.length) {
@@ -1038,6 +1070,33 @@ async function submitAdminRequest() {
     if (!res || res._error) { showToast('Could not send request. Try again.'); return; }
     document.getElementById('adminReqForm').style.display = 'none';
     document.getElementById('adminReqSent').style.display = 'block';
+}
+
+// ── REPORT ───────────────────────────────────────────────────────────────────
+let _reportPostId = null;
+function openReport(postId) {
+    _reportPostId = postId;
+    document.getElementById('reportModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+function closeReport() {
+    document.getElementById('reportModal').classList.remove('open');
+    document.body.style.overflow = '';
+    _reportPostId = null;
+}
+async function submitReport() {
+    if (!_reportPostId) return;
+    const reason = document.getElementById('reportReason').value.trim();
+    const btn = document.getElementById('reportBtn');
+    btn.textContent = 'Reporting…'; btn.disabled = true;
+    const res = await sb.reportPost(_reportPostId, reason);
+    btn.textContent = 'Report'; btn.disabled = false;
+    if (res && !res._error) {
+        showToast('Report submitted');
+        closeReport();
+    } else {
+        showToast(res?._error || 'Could not submit report');
+    }
 }
 
 // ── TOAST ─────────────────────────────────────────────────────────────────────
