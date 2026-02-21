@@ -63,6 +63,8 @@ const sb = (() => {
         if (!res || res._error) {
             _token = null;
             localStorage.removeItem('fi_token');
+            // If banned, show message
+            if (res?._status === 403) return { _banned: true };
             return null;
         }
         return res;
@@ -153,6 +155,9 @@ const sb = (() => {
     async function getAlerts(uid) { return api(`/alerts/${uid}`); }
 
     // ── REPORTS ───────────────────────────────────────────────────────────────
+    async function deleteReport(postId) {
+        return api(`/reports/${postId}`, { method:'DELETE' });
+    }
     async function reportPost(postId, reason) {
         return api(`/reports/${postId}`, { method:'POST', body: JSON.stringify({reason}) });
     }
@@ -182,7 +187,7 @@ const sb = (() => {
         getComments, createComment, uploadImage,
         getStats, setRole, banUser, unbanUser,
         getConversations, getDMThread, sendDM, getUnreadCount,
-        sendAlert, getAlerts, reportPost, getReports,
+        sendAlert, getAlerts, reportPost, deleteReport, getReports,
         submitAdminRequest, getPendingRequests, reviewRequest, logAction, getModLogs,
         sendMagicLink,
     };
