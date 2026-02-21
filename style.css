@@ -472,3 +472,21 @@ button { cursor: pointer; font-family: inherit; }
     background: rgba(255,255,255,0.18);
 }
 .bottom-sheet { touch-action: none; }
+
+/* ── VERIFIED BADGES ── */
+.badge-verified {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:14px; height:14px; border-radius:50%;
+    font-size:9px; font-weight:800; margin-left:3px;
+    vertical-align:middle; flex-shrink:0;
+}
+.badge-verified.purple { background:rgba(160,84,245,0.2); color:#a054f5; border:1px solid rgba(160,84,245,0.35); }
+.badge-verified.gold   { background:rgba(232,168,56,0.2); color:#e8a838; border:1px solid rgba(232,168,56,0.35); }
+
+/* ── REPORT COUNT BADGE ── */
+.report-count-badge {
+    display:inline-flex; align-items:center; gap:3px;
+    font-size:10px; color:var(--danger); font-weight:600;
+    background:rgba(224,90,90,0.1); border:1px solid rgba(224,90,90,0.2);
+    border-radius:50px; padding:2px 7px;
+}
