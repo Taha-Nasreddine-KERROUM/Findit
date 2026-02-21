@@ -986,6 +986,8 @@ function openAdminRequestModal() {
     document.getElementById('adminReqModal').classList.add('open');
     document.getElementById('adminReqSent').style.display = 'none';
     document.getElementById('adminReqForm').style.display = '';
+    clearArId();
+    document.getElementById('arUid').value = App.currentUser?.uid || '';
     document.body.style.overflow = 'hidden';
 }
 function closeAdminReqModal() {
@@ -994,16 +996,45 @@ function closeAdminReqModal() {
 }
 
 // ── ADMIN REQUEST ────────────────────────────────────────────────────────────
+let _arIdDataUrl = null;
+
+function handleArIdFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        _arIdDataUrl = e.target.result;
+        document.getElementById('arIdPreview').src = e.target.result;
+        document.getElementById('arIdPlaceholder').style.display = 'none';
+        document.getElementById('arIdPreviewWrap').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+function clearArId() {
+    _arIdDataUrl = null;
+    document.getElementById('arIdPreview').src = '';
+    document.getElementById('arIdPlaceholder').style.display = '';
+    document.getElementById('arIdPreviewWrap').style.display = 'none';
+    document.getElementById('arIdInput').value = '';
+}
+
 async function submitAdminRequest() {
-    const name      = document.getElementById('arName').value.trim();
-    const uid       = document.getElementById('arUid')?.value.trim() || App.currentUser?.uid || '';
-    const roleTitle = document.getElementById('arRole').value.trim();
-    const reason    = document.getElementById('arReason').value.trim();
-    if (!name || !roleTitle || !reason) { showToast('Please fill in all fields'); return; }
+    if (!_arIdDataUrl) { showToast('Please upload your staff ID photo'); return; }
+    const uid = document.getElementById('arUid')?.value.trim() || App.currentUser?.uid || '';
     const btn = document.getElementById('adminReqBtn');
-    if (btn) { btn.textContent = 'Sending…'; btn.disabled = true; }
-    const res = await sb.submitAdminRequest({ name, uid, role_title: roleTitle, reason, email: uid });
-    if (btn) { btn.textContent = 'Submit Request'; btn.disabled = false; }
+    if (btn) { btn.textContent = 'Uploading…'; btn.disabled = true; }
+
+    // Upload the ID image
+    let idImageUrl = null;
+    idImageUrl = await sb.uploadImage(_arIdDataUrl, 'staff-ids');
+    if (!idImageUrl) {
+        if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
+        showToast('Could not upload image. Try again.');
+        return;
+    }
+
+    if (btn) btn.textContent = 'Sending…';
+    const res = await sb.submitAdminRequest({ uid, role_title: 'staff', reason: 'Staff ID submitted', email: uid, name: uid || 'unknown', id_image_url: idImageUrl });
+    if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
     if (!res || res._error) { showToast('Could not send request. Try again.'); return; }
     document.getElementById('adminReqForm').style.display = 'none';
     document.getElementById('adminReqSent').style.display = 'block';
