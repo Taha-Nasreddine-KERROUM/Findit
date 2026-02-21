@@ -476,12 +476,11 @@
   <div class="req-card" id="req-${r.id}">
     <div class="req-head">
       <div>
-        <div class="req-name">${esc(r.name)}</div>
-        <div class="req-meta">${esc(r.email)} · <em>${esc(r.role_title)}</em> · ${formatDate(r.created_at)}</div>
+        <div class="req-name">${r.requester_uid ? 'u/'+esc(r.requester_uid) : esc(r.name || 'Unknown')}</div>
+        <div class="req-meta">${formatDate(r.created_at)}</div>
       </div>
-      <span style="font-size:11px;color:var(--muted)">u/${esc(r.requester_uid)}</span>
     </div>
-    <div class="req-reason">${esc(r.reason)}</div>
+    ${r.id_image_url ? `<div style="margin:12px 0"><img src="${r.id_image_url}" style="max-width:100%;max-height:220px;border-radius:10px;object-fit:contain;border:1px solid var(--border)" onclick="this.style.maxHeight=this.style.maxHeight==='none'?'220px':'none'"></div>` : '<div style="color:var(--muted);font-size:12px;margin:8px 0">No ID image uploaded</div>'}
     <div class="req-actions">
       <button class="btn btn-success btn-sm" onclick="approveRequest('${r.id}','${r.user_id}')">Approve → Admin</button>
       <button class="btn btn-danger btn-sm" onclick="rejectRequest('${r.id}')">Reject</button>
