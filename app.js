@@ -556,26 +556,54 @@ function renderDMMessages(messages) {
     }
     msgs.innerHTML = messages.map(m => {
         const isMe = m.sender_uid === App.currentUser?.uid;
-        return `<div class="dm-msg ${isMe ? 'me' : 'them'}">${escHtml(m.body)}<div class="dm-msg-time">${timeAgo(new Date(m.created_at))}</div></div>`;
+        const imgHtml = m.image_url ? `<img src="${m.image_url}" style="max-width:180px;max-height:160px;border-radius:8px;display:block;margin-top:${m.body?'6px':'0'};object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'180px':'100%'">` : '';
+        return `<div class="dm-msg ${isMe ? 'me' : 'them'}">${m.body ? escHtml(m.body) : ''}${imgHtml}<div class="dm-msg-time">${timeAgo(new Date(m.created_at))}</div></div>`;
     }).join('');
     msgs.scrollTop = msgs.scrollHeight;
+}
+
+let _dmImageDataUrl = null;
+
+function handleDMImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        _dmImageDataUrl = e.target.result;
+        document.getElementById('dmImagePreview').src = e.target.result;
+        document.getElementById('dmImagePreviewWrap').style.display = 'flex';
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearDMImage() {
+    _dmImageDataUrl = null;
+    document.getElementById('dmImagePreview').src = '';
+    document.getElementById('dmImagePreviewWrap').style.display = 'none';
+    document.getElementById('dmImageInput').value = '';
 }
 
 async function sendDMClick() {
     if (!_dmOtherUid) return;
     const input = document.getElementById('dmInput');
     const body  = input.value.trim();
-    if (!body) return;
+    if (!body && !_dmImageDataUrl) return;
     input.value = '';
-    const res = await sb.sendDM(_dmOtherUid, body);
+
+    // Upload image if attached
+    let imageUrl = null;
+    if (_dmImageDataUrl) {
+        imageUrl = await sb.uploadImage(_dmImageDataUrl, 'dms');
+        clearDMImage();
+    }
+
+    const res = await sb.sendDM(_dmOtherUid, body, imageUrl);
     if (res) {
         const msgs = document.getElementById('dmMessages');
-        // Remove empty state if present
         const empty = msgs.querySelector('div[style*="padding:40px"]');
         if (empty) empty.remove();
         const div = document.createElement('div');
         div.className = 'dm-msg me';
-        div.innerHTML = `${escHtml(body)}<div class="dm-msg-time">just now</div>`;
+        div.innerHTML = `${body ? escHtml(body) : ''}${imageUrl ? `<img src="${imageUrl}" style="max-width:180px;max-height:160px;border-radius:8px;display:block;margin-top:${body?'6px':'0'};object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'180px':'100%'">` : ''}<div class="dm-msg-time">just now</div>`;
         msgs.appendChild(div);
         msgs.scrollTop = msgs.scrollHeight;
     }
@@ -950,6 +978,22 @@ function shareItem(btn) {
     const orig=btn.innerHTML;
     navigator.clipboard?.writeText(window.location.href);
     btn.textContent='Copied'; setTimeout(()=>btn.innerHTML=orig,1600);
+}
+
+// ── ADMIN REQUEST ────────────────────────────────────────────────────────────
+async function submitAdminRequest() {
+    const name      = document.getElementById('arName').value.trim();
+    const roleTitle = document.getElementById('arRole').value.trim();
+    const reason    = document.getElementById('arReason').value.trim();
+    if (!name || !roleTitle || !reason) { showToast('Please fill in all fields'); return; }
+    if (!App.isLoggedIn) { closeLogin(); openLogin(); return; }
+    const btn = document.querySelector('#adminRequestWrap .btn-full.btn-submit');
+    if (btn) { btn.textContent = 'Sending…'; btn.disabled = true; }
+    const res = await sb.submitAdminRequest({ name, role_title: roleTitle, reason, email: App.currentUser.uid });
+    if (btn) { btn.textContent = 'Submit Request'; btn.disabled = false; }
+    if (!res || res._error) { showToast('Could not send request. Try again.'); return; }
+    document.getElementById('adminRequestWrap').style.display = 'none';
+    document.getElementById('adminRequestSent').style.display = 'block';
 }
 
 // ── TOAST ─────────────────────────────────────────────────────────────────────
