@@ -740,11 +740,12 @@
   }
 
   async function dismissReport(postId) {
-    // Just remove from UI — no hard delete, admin reviewed it
+    await sb.deleteReport(postId);
     document.getElementById('report-' + postId)?.remove();
     const el = document.getElementById('reportsList');
     if (!el.querySelector('.req-card')) {
       el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">No reported posts — all clear.</div>';
+      clearBadge('reportsBadge');
     }
     toast('Report dismissed');
   }
@@ -753,7 +754,10 @@
   async function doDeletePost(postId) {
     if (!confirm('Delete this post? This cannot be undone.')) return;
     await sb.deletePost(postId);
+    await sb.deleteReport(postId);  // clear any reports too
     await sb.logAction(ME.profile.id, 'delete_post', null, postId, 'Deleted via admin panel');
+    // Remove from reports panel if visible
+    document.getElementById('report-' + postId)?.remove();
     loadPosts();
     toast('Post deleted');
   }
