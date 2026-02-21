@@ -162,7 +162,13 @@ function renderFeed() {
     const q = App.searchQuery.toLowerCase().trim();
     const f = App.activeFilter;
     const filtered = POSTS.filter(p => {
-        const statusMatch = f==='all' || p.status===f || p.location.toLowerCase().includes(f);
+        let statusMatch;
+        if (f === 'all' || !f || (Array.isArray(f) && f.length === 0)) {
+            statusMatch = true;
+        } else {
+            const filters = Array.isArray(f) ? f : [f];
+            statusMatch = filters.some(fv => p.status === fv || p.location.toLowerCase().includes(fv));
+        }
         const searchMatch = !q || [p.title,p.desc,p.location,p.category,p.owner].some(s=>s.toLowerCase().includes(q));
         return statusMatch && searchMatch;
     });
@@ -187,12 +193,34 @@ function initSearch() {
 }
 
 // ── FILTERS ───────────────────────────────────────────────────────────────────
+// activeFilters is a Set; 'all' means no specific filters
+let activeFilters = new Set();
+
 function initFilters() {
     document.querySelectorAll('.filter-chip').forEach(chip => {
         chip.addEventListener('click', () => {
-            document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
-            chip.classList.add('active');
-            App.activeFilter = chip.dataset.filter;
+            const f = chip.dataset.filter;
+            if (f === 'all') {
+                // reset to all
+                activeFilters.clear();
+                document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+                chip.classList.add('active');
+            } else {
+                // deselect 'all' chip
+                document.querySelector('.filter-chip[data-filter="all"]').classList.remove('active');
+                if (activeFilters.has(f)) {
+                    activeFilters.delete(f);
+                    chip.classList.remove('active');
+                } else {
+                    activeFilters.add(f);
+                    chip.classList.add('active');
+                }
+                // if nothing selected, go back to all
+                if (activeFilters.size === 0) {
+                    document.querySelector('.filter-chip[data-filter="all"]').classList.add('active');
+                }
+            }
+            App.activeFilter = activeFilters.size > 0 ? [...activeFilters] : 'all';
             renderFeed();
         });
     });
@@ -498,6 +526,7 @@ async function openProfile(name, initials, color, uid, profileId) {
 function scrollToPost(postId) {
     // Make sure it's in the feed (reset filters if needed)
     if (App.activeFilter !== 'all' || App.searchQuery) {
+        activeFilters.clear();
         App.activeFilter = 'all';
         App.searchQuery  = '';
         document.getElementById('searchInput').value = '';
