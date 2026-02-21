@@ -2,7 +2,7 @@
 //  FindIt – API Client
 //  Replace API_URL with your Hugging Face Space URL.
 // ============================================================
-const API_URL = 'https://TiH0-findit-backend.hf.space';
+const API_URL = 'https://YOUR-USERNAME-findit-backend.hf.space';
 
 const sb = (() => {
     let _token = localStorage.getItem('fi_token') || null;
@@ -154,8 +154,8 @@ const sb = (() => {
     async function submitAdminRequest(req) {
         return api('/admin/requests', { method: 'POST', body: JSON.stringify(req) });
     }
-    async function getPendingRequests() { return []; }
-    async function reviewRequest()      { return null; }
+    async function getPendingRequests() { return api('/admin/requests') || []; }
+    async function reviewRequest(reqId, status) { return api(`/admin/requests/${reqId}`, { method:'PATCH', body: JSON.stringify({status}) }); }
     async function logAction()          { return null; }
     async function getModLogs()         { return []; }
 
