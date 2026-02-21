@@ -146,6 +146,18 @@ const sb = (() => {
     }
     async function getUnreadCount()         { return api('/dms/unread/count'); }
 
+    // ── ALERTS ────────────────────────────────────────────────────────────────
+    async function sendAlert(targetUid, note) {
+        return api(`/alerts/${targetUid}`, { method:'POST', body: JSON.stringify({note}) });
+    }
+    async function getAlerts(uid) { return api(`/alerts/${uid}`); }
+
+    // ── REPORTS ───────────────────────────────────────────────────────────────
+    async function reportPost(postId, reason) {
+        return api(`/reports/${postId}`, { method:'POST', body: JSON.stringify({reason}) });
+    }
+    async function getReports() { return api('/reports') || []; }
+
     // ── ADMIN ─────────────────────────────────────────────────────────────────
     async function getStats()           { return api('/admin/stats'); }
     async function setRole(id, role)    { return updateProfile(id, { role }); }
@@ -170,6 +182,7 @@ const sb = (() => {
         getComments, createComment, uploadImage,
         getStats, setRole, banUser, unbanUser,
         getConversations, getDMThread, sendDM, getUnreadCount,
+        sendAlert, getAlerts, reportPost, getReports,
         submitAdminRequest, getPendingRequests, reviewRequest, logAction, getModLogs,
         sendMagicLink,
     };
