@@ -42,7 +42,7 @@
             <span style="font-size:13px;color:var(--recovered);font-weight:500">Admin Dashboard ↗</span>
         </div>
         <div class="menu-item" onclick="signOut()">Sign out</div>
-        <div class="menu-item" onclick="toggleMenu()">Settings</div>
+        <div class="menu-item" onclick="openAdminRequestModal()">Request Admin Access</div>
     </div>
 </div>
 
@@ -407,10 +407,7 @@
                 <button class="btn-full btn-submit" onclick="doRegister()" style="margin-top:12px" id="registerBtn">Create account</button>
             </div>
 
-            <div class="login-admin-line" style="margin-top:12px">
-                Admin authority?
-                <a class="login-admin-link" onclick="showAdminRequest()">Request access</a>
-            </div>
+
         </div>
 
         <!-- Admin request form -->
@@ -421,6 +418,7 @@
             </div>
             <div class="login-sub">Fill in this form and a super admin will review your request.</div>
             <input class="login-input" type="text" id="arName" placeholder="Your full name">
+            <input class="login-input" type="text" id="arUid" placeholder="Your username (if you have one)" style="margin-top:7px">
             <input class="login-input" type="text" id="arRole" placeholder="Your role (e.g. Library Staff)" style="margin-top:7px">
             <textarea class="login-input" id="arReason" placeholder="Why do you need admin access?" rows="3" style="margin-top:7px;resize:none;font-family:inherit"></textarea>
             <button class="btn-full btn-submit" style="margin-top:10px" onclick="submitAdminRequest()">Submit Request</button>
@@ -440,5 +438,36 @@
 <script src="api.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
+<!-- ── ADMIN REQUEST MODAL ── -->
+<div class="modal-bg" id="adminReqModal" onclick="if(event.target===this)closeAdminReqModal()">
+    <div class="modal-box" style="max-width:360px">
+        <div class="modal-title">Request Admin Access</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Fill in this form and a super admin will review your request.</div>
+        <div class="form-group">
+            <input class="form-input" type="text" id="arName" placeholder="Your full name">
+        </div>
+        <div class="form-group">
+            <input class="form-input" type="text" id="arUid" placeholder="Your username (if you have one)">
+        </div>
+        <div class="form-group">
+            <input class="form-input" type="text" id="arRole" placeholder="Your role (e.g. Library Staff, Security)">
+        </div>
+        <div class="form-group">
+            <textarea class="form-input" id="arReason" placeholder="Why do you need admin access?" rows="3" style="resize:none;font-family:inherit"></textarea>
+        </div>
+        <div id="adminReqSent" style="display:none;text-align:center;padding:12px 0">
+            <div style="font-size:32px;margin-bottom:8px">✅</div>
+            <div style="font-weight:700;font-size:15px;margin-bottom:6px">Request Submitted</div>
+            <div style="font-size:13px;color:var(--muted)">The admin team will review your request.</div>
+        </div>
+        <div id="adminReqForm">
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeAdminReqModal()">Cancel</button>
+                <button class="btn-submit" id="adminReqBtn" onclick="submitAdminRequest()">Submit Request</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>
