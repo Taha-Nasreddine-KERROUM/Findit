@@ -136,6 +136,14 @@ const sb = (() => {
         } catch(e) { return null; }
     }
 
+    // ── DMS ───────────────────────────────────────────────────────────────────
+    async function getConversations()       { return api('/dms/conversations') || []; }
+    async function getDMThread(otherUid)    { return api(`/dms/${otherUid}`); }
+    async function sendDM(otherUid, body)   {
+        return api(`/dms/${otherUid}`, { method:'POST', body: JSON.stringify({body}) });
+    }
+    async function getUnreadCount()         { return api('/dms/unread/count'); }
+
     // ── ADMIN ─────────────────────────────────────────────────────────────────
     async function getStats()           { return api('/admin/stats'); }
     async function setRole(id, role)    { return updateProfile(id, { role }); }
@@ -159,6 +167,7 @@ const sb = (() => {
         getPosts, createPost, updatePost, deletePost,
         getComments, createComment, uploadImage,
         getStats, setRole, banUser, unbanUser,
+        getConversations, getDMThread, sendDM, getUnreadCount,
         submitAdminRequest, getPendingRequests, reviewRequest, logAction, getModLogs,
         sendMagicLink,
     };
