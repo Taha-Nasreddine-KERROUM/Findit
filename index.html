@@ -137,7 +137,6 @@
                 <div class="profile-name" id="pName">Amir B.</div>
                 <div class="profile-handle" id="pHandle">u/amir_b</div><span id="pVerifiedBadge"></span>
                 <div class="profile-points" id="pPoints">840 points</div>
-                <div id="pAlertWrap" style="display:none;margin-top:4px"></div>
             </div>
         </div>
         <button class="sheet-close-btn" onclick="closeProfile()">✕</button>
@@ -146,6 +145,7 @@
         <div class="stat"><div class="stat-num" id="pStatPosted">…</div><div class="stat-label">Posted</div></div>
         <div class="stat"><div class="stat-num" id="pStatReturned">…</div><div class="stat-label">Recovered</div></div>
         <div class="stat"><div class="stat-num" id="pStatComments">…</div><div class="stat-label">Comments</div></div>
+        <div class="stat" id="pAlertWrap" style="display:none"><div class="stat-num" id="pStatAlerts" style="color:var(--danger)">0</div><div class="stat-label" style="color:var(--danger)">⚠ Alerts</div></div>
     </div>
     <button class="profile-msg-btn" id="profileMsgBtn" onclick="openDM()">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -165,7 +165,6 @@
     <div id="dmInbox">
         <div class="dm-header">
             <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;flex:1">Messages</div>
-            <div id="dmUnreadBadge" style="display:none;background:var(--accent);color:#fff;border-radius:50%;width:20px;height:20px;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-right:8px"></div>
             <button class="dm-close" onclick="closeDM()">✕</button>
         </div>
         <div id="dmConvoList" style="overflow-y:auto;flex:1;padding:8px 0">
