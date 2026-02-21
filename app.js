@@ -482,27 +482,115 @@ function closeSheet(id, overlayId) {
 function tryDM(targetUid, targetName, targetInitials, targetColor) {
     if (!App.isLoggedIn) { openLogin(); return; }
     if (targetUid) {
-        openDM(targetName || targetUid, targetInitials || targetUid.slice(0,2).toUpperCase(), targetColor || '#5b8dff');
+        closeProfile();
+        setTimeout(() => openDMThread(targetUid, targetName, targetInitials, targetColor), 160);
     } else {
-        // Open DM from FAB — show a placeholder or last conversation
-        openDM('Messages', 'DM', '#5b8dff');
+        openDMSheet();
     }
 }
 
+// ── DM ────────────────────────────────────────────────────────────────────────
+let _dmOtherUid = null;
+
+async function openDMSheet() {
+    if (!App.isLoggedIn) { openLogin(); return; }
+    document.getElementById('dmSheet').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    showDMInbox();
+}
+
+async function showDMInbox() {
+    _dmOtherUid = null;
+    document.getElementById('dmInbox').style.display  = 'flex';
+    document.getElementById('dmInbox').style.flexDirection = 'column';
+    document.getElementById('dmThread').style.display = 'none';
+
+    const list = document.getElementById('dmConvoList');
+    list.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--muted);font-size:13px">Loading…</div>';
+
+    const convos = await sb.getConversations();
+    if (!convos || !convos.length) {
+        list.innerHTML = '<div style="text-align:center;padding:40px 16px;color:var(--muted);font-size:13px">No messages yet. Open someone\'s profile and tap Message.</div>';
+        return;
+    }
+    list.innerHTML = convos.map(c => `
+    <div class="dm-convo-item" onclick="openDMThread('${c.uid}','${escHtml(c.name)}','${c.initials}','${c.color}')">
+        <div class="dm-avatar" style="background:${c.color};flex-shrink:0">${c.initials}</div>
+        <div style="flex:1;min-width:0">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+                <span style="font-weight:600;font-size:13px">u/${escHtml(c.uid)}</span>
+                <span style="font-size:11px;color:var(--muted)">${c.last_at ? timeAgo(new Date(c.last_at)) : ''}</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(c.last_msg || '')}</div>
+        </div>
+        ${c.unread > 0 ? `<div style="background:var(--accent);color:#fff;border-radius:50%;min-width:18px;height:18px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;flex-shrink:0">${c.unread}</div>` : ''}
+    </div>`).join('');
+}
+
+async function openDMThread(otherUid, name, initials, color) {
+    _dmOtherUid = otherUid;
+    document.getElementById('dmInbox').style.display  = 'none';
+    document.getElementById('dmThread').style.display = 'flex';
+    document.getElementById('dmAvatar').style.background = color;
+    document.getElementById('dmAvatar').textContent      = initials;
+    document.getElementById('dmName').textContent        = name || ('u/' + otherUid);
+
+    const msgs = document.getElementById('dmMessages');
+    msgs.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading…</div>';
+
+    const data = await sb.getDMThread(otherUid);
+    if (!data) { msgs.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Could not load messages</div>'; return; }
+
+    renderDMMessages(data.messages);
+    document.getElementById('dmInput').focus();
+}
+
+function renderDMMessages(messages) {
+    const msgs = document.getElementById('dmMessages');
+    if (!messages.length) {
+        msgs.innerHTML = '<div style="text-align:center;padding:40px 16px;color:var(--muted);font-size:13px">No messages yet. Say hi! 👋</div>';
+        return;
+    }
+    msgs.innerHTML = messages.map(m => {
+        const isMe = m.sender_uid === App.currentUser?.uid;
+        return `<div class="dm-msg ${isMe ? 'me' : 'them'}">${escHtml(m.body)}<div class="dm-msg-time">${timeAgo(new Date(m.created_at))}</div></div>`;
+    }).join('');
+    msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function sendDMClick() {
+    if (!_dmOtherUid) return;
+    const input = document.getElementById('dmInput');
+    const body  = input.value.trim();
+    if (!body) return;
+    input.value = '';
+    const res = await sb.sendDM(_dmOtherUid, body);
+    if (res) {
+        const msgs = document.getElementById('dmMessages');
+        // Remove empty state if present
+        const empty = msgs.querySelector('div[style*="padding:40px"]');
+        if (empty) empty.remove();
+        const div = document.createElement('div');
+        div.className = 'dm-msg me';
+        div.innerHTML = `${escHtml(body)}<div class="dm-msg-time">just now</div>`;
+        msgs.appendChild(div);
+        msgs.scrollTop = msgs.scrollHeight;
+    }
+}
+
+function closeDM() {
+    document.getElementById('dmSheet').classList.remove('open');
+    document.body.style.overflow = '';
+    _dmOtherUid = null;
+}
+
+// Legacy openDM called from profile sheet
 function openDM() {
     closeProfile();
-    document.getElementById('dmAvatar').style.background = curProfile.color;
-    document.getElementById('dmAvatar').textContent      = curProfile.initials;
-    document.getElementById('dmName').textContent        = curProfile.name;
-    setTimeout(()=>{document.getElementById('dmSheet').classList.add('open'); document.body.style.overflow='hidden';},160);
-}
-function closeDM() { document.getElementById('dmSheet').classList.remove('open'); document.body.style.overflow=''; }
-function sendDMClick() {
-    const input = document.getElementById('dmInput');
-    if (!input.value.trim()) return;
-    const msgs = document.getElementById('dmMessages');
-    const div  = document.createElement('div'); div.className='dm-msg me'; div.textContent=input.value;
-    msgs.appendChild(div); input.value=''; msgs.scrollTop=msgs.scrollHeight;
+    setTimeout(() => {
+        if (curProfile?.uid) openDMThread(curProfile.uid, curProfile.name, curProfile.initials, curProfile.color);
+        else openDMSheet();
+    }, 160);
 }
 
 // ── LOCATION ──────────────────────────────────────────────────────────────────
