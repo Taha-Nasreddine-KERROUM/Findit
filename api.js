@@ -2,7 +2,7 @@
 //  FindIt – API Client
 //  Replace API_URL with your Hugging Face Space URL.
 // ============================================================
-const API_URL = 'https://TiH0-findit-backend.hf.space';
+const API_URL = 'https://YOUR-USERNAME-findit-backend.hf.space';
 
 const sb = (() => {
     let _token = localStorage.getItem('fi_token') || null;
@@ -139,8 +139,10 @@ const sb = (() => {
     // ── DMS ───────────────────────────────────────────────────────────────────
     async function getConversations()       { return api('/dms/conversations') || []; }
     async function getDMThread(otherUid)    { return api(`/dms/${otherUid}`); }
-    async function sendDM(otherUid, body)   {
-        return api(`/dms/${otherUid}`, { method:'POST', body: JSON.stringify({body}) });
+    async function sendDM(otherUid, body, imageUrl = null) {
+        const payload = { body: body || '' };
+        if (imageUrl) payload.image_url = imageUrl;
+        return api(`/dms/${otherUid}`, { method:'POST', body: JSON.stringify(payload) });
     }
     async function getUnreadCount()         { return api('/dms/unread/count'); }
 
