@@ -438,15 +438,23 @@ async function openProfile(name, initials, color, uid, profileId) {
     const commentsEl = document.getElementById('pStatComments');
     if (commentsEl) commentsEl.textContent = stats.commentCount;
 
-    // Show alert count — admin eyes only, non-admin users only
+    // Show alert count on member profiles — visible to everyone, only for non-admins
     const alertWrap = document.getElementById('pAlertWrap');
+    const alertStat = document.getElementById('pStatAlerts');
     if (alertWrap) {
         const targetIsAdmin = ['admin','super_admin'].includes(stats.role || '');
-        if (App.isAdmin && !targetIsAdmin) {
+        if (!targetIsAdmin && App.isAdmin) {
+            // Admins see the count
             const alertData = await sb.getAlerts(uid);
             const count = alertData?.count || 0;
-            alertWrap.style.display = '';
-            alertWrap.innerHTML = `<span style="font-size:11px;font-weight:600;color:${count>=3?'var(--danger)':count>0?'var(--recovered)':'var(--muted)'}">⚠ ${count} alert${count!==1?'s':''} (active)</span>`;
+            if (alertStat) alertStat.textContent = count;
+            alertWrap.style.display = count > 0 ? '' : 'none';
+        } else if (!targetIsAdmin) {
+            // Members see count on other members' profiles too
+            const alertData = await sb.getAlerts(uid);
+            const count = alertData?.count || 0;
+            if (alertStat) alertStat.textContent = count;
+            alertWrap.style.display = count > 0 ? '' : 'none';
         } else {
             alertWrap.style.display = 'none';
         }
