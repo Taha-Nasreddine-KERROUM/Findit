@@ -18,7 +18,12 @@ const App = {
         if (me) setUser(me);
         else {
             const restored = await sb.restoreSession();
-            if (restored) setUser(restored);
+            if (restored?._banned) {
+                showToast('Your account has been banned.');
+                sb.signOut();
+            } else if (restored) {
+                setUser(restored);
+            }
         }
         const rows = await sb.getPosts();
         POSTS = (rows || []).filter(r => !r.is_deleted).map(mapRow);
@@ -238,6 +243,9 @@ function updateMenuState() {
         document.getElementById('menuUserName').textContent      = App.currentUser.name;
         document.getElementById('menuUserHandle').textContent    = 'u/'+App.currentUser.uid;
         document.getElementById('adminMenuItem').style.display   = App.isAdmin ? '' : 'none';
+    // Hide "Request Admin Access" for admins — they already have access
+    const reqAdminItem = document.querySelector('.menu-item[onclick="openAdminRequestModal()"]');
+    if (reqAdminItem) reqAdminItem.style.display = App.isAdmin ? 'none' : '';
     }
 }
 
