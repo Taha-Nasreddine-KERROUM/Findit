@@ -135,8 +135,9 @@
             <div class="profile-pic" id="pAvatar" style="background:#4da6ff">AB</div>
             <div>
                 <div class="profile-name" id="pName">Amir B.</div>
-                <div class="profile-handle" id="pHandle">u/amir_b</div>
+                <div class="profile-handle" id="pHandle">u/amir_b</div><span id="pVerifiedBadge"></span>
                 <div class="profile-points" id="pPoints">840 points</div>
+                <div id="pAlertWrap" style="display:none;margin-top:4px"></div>
             </div>
         </div>
         <button class="sheet-close-btn" onclick="closeProfile()">✕</button>
@@ -488,6 +489,25 @@
             <button class="btn-full btn-submit" onclick="closeAdminReqModal()" style="margin-top:20px">Done</button>
         </div>
 
+    </div>
+</div>
+
+<!-- ── REPORT MODAL ── -->
+<div class="modal-bg" id="reportModal" onclick="if(event.target===this)closeReport()">
+    <div class="modal-box" style="max-width:340px">
+        <div class="modal-title">Report Post</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Tell us what's wrong with this post. Admins will review it.</div>
+        <select class="form-input" id="reportReason" style="width:100%;margin-bottom:0">
+            <option value="">Select a reason…</option>
+            <option value="spam">Spam or misleading</option>
+            <option value="inappropriate">Inappropriate content</option>
+            <option value="fake">Fake or fraudulent</option>
+            <option value="other">Other</option>
+        </select>
+        <div class="modal-actions" style="margin-top:16px">
+            <button class="btn-cancel" onclick="closeReport()">Cancel</button>
+            <button class="btn-submit" id="reportBtn" onclick="submitReport()">Report</button>
+        </div>
     </div>
 </div>
 
