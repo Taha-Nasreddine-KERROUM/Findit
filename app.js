@@ -481,11 +481,14 @@ function closeSheet(id, overlayId) {
 // ── DM ────────────────────────────────────────────────────────────────────────
 function tryDM(targetUid, targetName, targetInitials, targetColor) {
     if (!App.isLoggedIn) { openLogin(); return; }
+    closeProfile();
+    const sheet = document.getElementById('dmSheet');
+    sheet.classList.add('open');
+    document.body.style.overflow = 'hidden';
     if (targetUid) {
-        closeProfile();
-        setTimeout(() => openDMThread(targetUid, targetName, targetInitials, targetColor), 160);
+        setTimeout(() => openDMThread(targetUid, targetName, targetInitials, targetColor), 80);
     } else {
-        openDMSheet();
+        setTimeout(() => showDMInbox(), 80);
     }
 }
 
