@@ -36,27 +36,32 @@
                 <div style="font-size:11px;color:var(--muted)" id="menuUserHandle">u/me</div>
             </div>
         </div>
-        <div class="menu-divider"></div>
-        <div id="adminMenuItem" style="display:none" class="menu-item" onclick="openAdminDashboard()">
-            <span style="font-size:13px;color:var(--recovered);font-weight:500">Admin Dashboard ↗</span>
+        <div id="adminMenuSection" style="display:none">
+            <div class="menu-divider"></div>
+            <div id="adminMenuItem" class="menu-item" onclick="openAdminDashboard()">
+                <span style="font-size:13px;color:var(--recovered);font-weight:500">Admin Dashboard ↗</span>
+            </div>
         </div>
+        <div class="menu-divider"></div>
         <div class="menu-item" onclick="signOut()">Sign out</div>
-        <div class="menu-item" onclick="openAdminRequestModal()">Request Admin Access</div>
+        <div id="reqAdminMenuItem" class="menu-item" onclick="openAdminRequestModal()">Request Admin Access</div>
     </div>
 </div>
 
 <!-- ── FILTER CHIPS ── -->
-<div class="search-filters">
-    <div class="filter-chip active" data-filter="all">All</div>
-    <div class="filter-chip" data-filter="found">Found</div>
-    <div class="filter-chip" data-filter="lost">Lost</div>
-    <div class="filter-chip" data-filter="waiting">Waiting</div>
-    <div class="filter-chip" data-filter="recovered">Recovered</div>
-    <div class="filter-chip" data-filter="main library">Library</div>
-    <div class="filter-chip" data-filter="cafeteria">Cafeteria</div>
-    <div class="filter-chip" data-filter="engineering">Engineering</div>
-    <div class="filter-chip" data-filter="dorms">Dorms</div>
-    <div class="filter-chip" data-filter="sports">Sports</div>
+<div class="search-filters" id="searchFilters">
+    <div class="filter-chip active" data-filter="all" id="chipAll">All</div>
+    <div class="filter-chips-expand" id="filterExpand">
+        <div class="filter-chip" data-filter="found">Found</div>
+        <div class="filter-chip" data-filter="lost">Lost</div>
+        <div class="filter-chip" data-filter="waiting">Waiting</div>
+        <div class="filter-chip" data-filter="recovered">Recovered</div>
+        <div class="filter-chip" data-filter="main library">Library</div>
+        <div class="filter-chip" data-filter="cafeteria">Cafeteria</div>
+        <div class="filter-chip" data-filter="engineering">Engineering</div>
+        <div class="filter-chip" data-filter="dorms">Dorms</div>
+        <div class="filter-chip" data-filter="sports">Sports</div>
+    </div>
 </div>
 
 <!-- ── FEED ── -->
