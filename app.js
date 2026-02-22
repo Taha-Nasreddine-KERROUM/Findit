@@ -193,21 +193,28 @@ function initSearch() {
 }
 
 // ── FILTERS ───────────────────────────────────────────────────────────────────
-// activeFilters is a Set; 'all' means no specific filters
 let activeFilters = new Set();
 
 function initFilters() {
+    const allChip    = document.getElementById('chipAll');
+    const expandWrap = document.getElementById('filterExpand');
+
+    // Start collapsed (All selected)
+    expandWrap.classList.remove('open');
+
     document.querySelectorAll('.filter-chip').forEach(chip => {
         chip.addEventListener('click', () => {
             const f = chip.dataset.filter;
             if (f === 'all') {
-                // reset to all
+                // Collapse + reset
                 activeFilters.clear();
                 document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-                chip.classList.add('active');
+                allChip.classList.add('active');
+                expandWrap.classList.remove('open');
             } else {
-                // deselect 'all' chip
-                document.querySelector('.filter-chip[data-filter="all"]').classList.remove('active');
+                // Expand the bar
+                expandWrap.classList.add('open');
+                allChip.classList.remove('active');
                 if (activeFilters.has(f)) {
                     activeFilters.delete(f);
                     chip.classList.remove('active');
@@ -215,15 +222,21 @@ function initFilters() {
                     activeFilters.add(f);
                     chip.classList.add('active');
                 }
-                // if nothing selected, go back to all
+                // Nothing selected → back to All
                 if (activeFilters.size === 0) {
-                    document.querySelector('.filter-chip[data-filter="all"]').classList.add('active');
+                    allChip.classList.add('active');
+                    expandWrap.classList.remove('open');
                 }
             }
             App.activeFilter = activeFilters.size > 0 ? [...activeFilters] : 'all';
             renderFeed();
         });
     });
+
+    // Clicking All also collapses
+    allChip.addEventListener('click', () => {
+        expandWrap.classList.remove('open');
+    }, true);
 }
 
 // ── THREE-DOT MENU ────────────────────────────────────────────────────────────
@@ -270,9 +283,9 @@ function updateMenuState() {
         document.getElementById('menuAvatarSm').textContent      = App.currentUser.initials;
         document.getElementById('menuUserName').textContent      = App.currentUser.name;
         document.getElementById('menuUserHandle').textContent    = 'u/'+App.currentUser.uid;
-        document.getElementById('adminMenuItem').style.display   = App.isAdmin ? '' : 'none';
-    // Hide "Request Admin Access" for admins — they already have access
-    const reqAdminItem = document.querySelector('.menu-item[onclick="openAdminRequestModal()"]');
+        const adminSection = document.getElementById('adminMenuSection');
+    if (adminSection) adminSection.style.display = App.isAdmin ? '' : 'none';
+    const reqAdminItem = document.getElementById('reqAdminMenuItem');
     if (reqAdminItem) reqAdminItem.style.display = App.isAdmin ? 'none' : '';
     }
 }
@@ -531,7 +544,8 @@ function scrollToPost(postId) {
         App.searchQuery  = '';
         document.getElementById('searchInput').value = '';
         document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
-        document.querySelector('.filter-chip[data-filter="all"]').classList.add('active');
+        document.getElementById('chipAll')?.classList.add('active');
+        document.getElementById('filterExpand')?.classList.remove('open');
         renderFeed();
     }
     const el = document.querySelector(`[data-post="${postId}"]`);
