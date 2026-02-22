@@ -173,8 +173,10 @@ const sb = (() => {
     }
     async function getPendingRequests() { return api('/admin/requests') || []; }
     async function reviewRequest(reqId, status) { return api(`/admin/requests/${reqId}`, { method:'PATCH', body: JSON.stringify({status}) }); }
-    async function logAction()          { return null; }
-    async function getModLogs()         { return []; }
+    async function logAction(adminId, action, targetId, postId, note) {
+        return api('/admin/log', { method:'POST', body: JSON.stringify({action, target_id:targetId||null, post_id:postId||null, note:note||''}) });
+    }
+    async function getModLogs() { return api('/admin/log') || []; }
 
     // Keep old name as alias for boot sequence
     async function sendMagicLink()      { return null; }
