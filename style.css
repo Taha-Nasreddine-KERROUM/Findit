@@ -2,7 +2,7 @@
     --bg: #0d0f14; --surface: #161820; --surface2: #1e2028;
     --border: rgba(255,255,255,0.07); --text: #eef0f5; --muted: #6b7080;
     --accent: #5b8dff; --found: #22c97a; --lost: #4da6ff;
-    --waiting: #8a8f9e; --recovered: #e8a838; --radius: 18px;
+    --waiting: #8a8f9e; --recovered: #a054f5; --radius: 18px;
 }
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 html { scroll-behavior: smooth; }
@@ -153,7 +153,7 @@ button { cursor: pointer; font-family: inherit; }
 .status-found { background: rgba(34,201,122,0.1); color: var(--found); border: 1px solid rgba(34,201,122,0.2); }
 .status-lost { background: rgba(77,166,255,0.1); color: var(--lost); border: 1px solid rgba(77,166,255,0.2); }
 .status-waiting { background: rgba(138,143,158,0.1); color: var(--waiting); border: 1px solid rgba(138,143,158,0.18); }
-.status-recovered { background: rgba(232,168,56,0.12); color: var(--recovered); border: 1px solid rgba(232,168,56,0.25); }
+.status-recovered { background: rgba(160,84,245,0.12); color: var(--recovered); border: 1px solid rgba(160,84,245,0.25); }
 
 .card-title { padding: 9px 13px 4px; font-family: 'Syne', sans-serif; font-weight: 700; font-size: 15px; line-height: 1.45; overflow: visible; }
 .card-desc { padding: 0 13px 9px; font-size: 13px; color: #9ba1b0; line-height: 1.55; }
@@ -386,7 +386,7 @@ button { cursor: pointer; font-family: inherit; }
 .status-opt.sel-found { background: rgba(34,201,122,0.12); color: var(--found); border-color: rgba(34,201,122,0.3); }
 .status-opt.sel-lost { background: rgba(77,166,255,0.12); color: var(--lost); border-color: rgba(77,166,255,0.3); }
 .status-opt.sel-waiting { background: rgba(138,143,158,0.12); color: var(--waiting); border-color: rgba(138,143,158,0.25); }
-.status-opt.sel-recovered { background: rgba(232,168,56,0.12); color: var(--recovered); border-color: rgba(232,168,56,0.3); }
+.status-opt.sel-recovered { background: rgba(160,84,245,0.12); color: var(--recovered); border-color: rgba(160,84,245,0.3); }
 
 /* CONFIRM */
 .confirm-box { max-width: 340px; text-align: center; }
@@ -396,7 +396,7 @@ button { cursor: pointer; font-family: inherit; }
 .btn-danger:hover { opacity: 0.75; }
 
 /* ADMIN */
-.admin-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 50px; font-size: 10px; font-weight: 600; background: rgba(232,168,56,0.12); color: var(--recovered); border: 1px solid rgba(232,168,56,0.22); }
+.admin-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 50px; font-size: 10px; font-weight: 600; background: rgba(232,168,56,0.12); color: #e8a838; border: 1px solid rgba(232,168,56,0.22); }
 .admin-action { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: 11px; border: 1px solid var(--border); margin-bottom: 8px; transition: background 0.12s; }
 .admin-action:hover { background: var(--surface2); }
 .admin-action-icon { width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0; }
