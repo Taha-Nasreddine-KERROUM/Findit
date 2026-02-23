@@ -158,6 +158,12 @@ const sb = (() => {
     async function deleteComment(commentId) {
         return api(`/comments/${commentId}`, { method:'DELETE' });
     }
+    async function editComment(commentId, body) {
+        return api(`/comments/${commentId}`, { method:'PATCH', body: JSON.stringify({body}) });
+    }
+    async function reportComment(commentId, reason) {
+        return api(`/comments/${commentId}/report`, { method:'POST', body: JSON.stringify({reason}) });
+    }
     async function deleteReport(postId) {
         return api(`/reports/${postId}`, { method:'DELETE' });
     }
@@ -192,7 +198,7 @@ const sb = (() => {
         getComments, createComment, uploadImage,
         getStats, setRole, banUser, unbanUser,
         getConversations, getDMThread, sendDM, getUnreadCount,
-        deleteComment,
+        deleteComment, editComment, reportComment,
         sendAlert, getAlerts, reportPost, deleteReport, getReports,
         submitAdminRequest, getPendingRequests, reviewRequest, logAction, getModLogs,
         sendMagicLink,
