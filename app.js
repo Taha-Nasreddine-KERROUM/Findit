@@ -198,21 +198,25 @@ let activeFilters = new Set();
 function initFilters() {
     const allChip    = document.getElementById('chipAll');
     const expandWrap = document.getElementById('filterExpand');
-
-    // Start collapsed (All selected)
     expandWrap.classList.remove('open');
 
     document.querySelectorAll('.filter-chip').forEach(chip => {
         chip.addEventListener('click', () => {
             const f = chip.dataset.filter;
             if (f === 'all') {
-                // Collapse + reset
-                activeFilters.clear();
-                document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-                allChip.classList.add('active');
-                expandWrap.classList.remove('open');
+                if (allChip.classList.contains('active')) {
+                    // Deselect All → expand others, show everything still
+                    allChip.classList.remove('active');
+                    expandWrap.classList.add('open');
+                    activeFilters.clear();
+                } else {
+                    // Re-select All → collapse others, clear filters
+                    activeFilters.clear();
+                    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+                    allChip.classList.add('active');
+                    expandWrap.classList.remove('open');
+                }
             } else {
-                // Expand the bar
                 expandWrap.classList.add('open');
                 allChip.classList.remove('active');
                 if (activeFilters.has(f)) {
@@ -222,21 +226,15 @@ function initFilters() {
                     activeFilters.add(f);
                     chip.classList.add('active');
                 }
-                // Nothing selected → back to All
+                // If nothing selected, mark All as active but keep bar open
                 if (activeFilters.size === 0) {
                     allChip.classList.add('active');
-                    expandWrap.classList.remove('open');
                 }
             }
             App.activeFilter = activeFilters.size > 0 ? [...activeFilters] : 'all';
             renderFeed();
         });
     });
-
-    // Clicking All also collapses
-    allChip.addEventListener('click', () => {
-        expandWrap.classList.remove('open');
-    }, true);
 }
 
 // ── THREE-DOT MENU ────────────────────────────────────────────────────────────
@@ -344,16 +342,22 @@ function buildCommentHtml(c, byParent) {
     const time     = timeAgo(new Date(c.created_at));
     const replies  = (byParent[c.id] || []).map(r => buildCommentHtml(r, byParent)).join('');
 
+    const isMyComment = App.isLoggedIn && App.currentUser?.uid === uid;
+    const canDelete   = isMyComment || App.isAdmin;
     return `
     <div class="comment" data-comment-id="${c.id}">
-      <div class="comment-avatar" style="background:${color}">${initials}</div>
+      <div class="comment-avatar" style="background:${color}"
+           onclick="openProfile('${name.replace(/'/g,"\'")}','${initials}','${color}','${uid}','')"
+           style="background:${color};cursor:pointer">${initials}</div>
       <div class="comment-body">
-        <div class="comment-user">u/${uid}</div>
+        <div class="comment-user" onclick="openProfile('${name.replace(/'/g,"\'")}','${initials}','${color}','${uid}','')"
+             style="cursor:pointer">u/${uid}</div>
         <div class="comment-text">${escHtml(c.body)}</div>
         ${c.image_url ? `<img src="${c.image_url}" style="max-width:160px;max-height:120px;border-radius:8px;margin-top:6px;display:block;object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'160px':'100%';this.style.maxHeight=this.style.maxHeight==='none'?'120px':'none'">` : ''}
         <div class="comment-meta">
           <span class="comment-time">${time}</span>
           ${App.isLoggedIn ? `<button class="reply-btn" onclick="toggleReply(this,'${c.id}')">Reply</button>` : ''}
+          ${canDelete ? `<button class="reply-btn" style="color:var(--danger)" onclick="deleteComment('${c.id}')">Delete</button>` : ''}
         </div>
         <div class="reply-form" id="reply-form-${c.id}" style="display:none"></div>
         <div class="replies">${replies}</div>
@@ -371,6 +375,13 @@ function timeAgo(date) {
     if (s < 3600) return Math.floor(s/60) + 'm ago';
     if (s < 86400) return Math.floor(s/3600) + 'h ago';
     return Math.floor(s/86400) + 'd ago';
+}
+
+async function deleteComment(commentId) {
+    const res = await sb.deleteComment(commentId);
+    if (res?.ok) {
+        document.querySelector(`.comment[data-comment-id="${commentId}"]`)?.remove();
+    }
 }
 
 function closeComments() {
@@ -609,7 +620,8 @@ async function showDMInbox() {
     }
     list.innerHTML = convos.map(c => `
     <div class="dm-convo-item" onclick="openDMThread('${c.uid}','${escHtml(c.name)}','${c.initials}','${c.color}')">
-        <div class="dm-avatar" style="background:${c.color};flex-shrink:0">${c.initials}</div>
+        <div class="dm-avatar" style="background:${c.color};flex-shrink:0;cursor:pointer"
+             onclick="event.stopPropagation();closeDM();openProfile('${escHtml(c.name)}','${c.initials}','${c.color}','${c.uid}','')">${c.initials}</div>
         <div style="flex:1;min-width:0">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
                 <span style="font-weight:600;font-size:13px">u/${escHtml(c.uid)}</span>
@@ -625,9 +637,14 @@ async function openDMThread(otherUid, name, initials, color) {
     _dmOtherUid = otherUid;
     document.getElementById('dmInbox').style.display  = 'none';
     document.getElementById('dmThread').style.display = 'flex';
-    document.getElementById('dmAvatar').style.background = color;
-    document.getElementById('dmAvatar').textContent      = initials;
-    document.getElementById('dmName').textContent        = name || ('u/' + otherUid);
+    const avatarEl = document.getElementById('dmAvatar');
+    avatarEl.style.background = color;
+    avatarEl.textContent      = initials;
+    avatarEl.style.cursor     = 'pointer';
+    avatarEl.onclick          = () => { closeDM(); openProfile(name || otherUid, initials, color, otherUid, ''); };
+    document.getElementById('dmName').textContent = name || ('u/' + otherUid);
+    document.getElementById('dmName').style.cursor = 'pointer';
+    document.getElementById('dmName').onclick = () => { closeDM(); openProfile(name || otherUid, initials, color, otherUid, ''); };
 
     const msgs = document.getElementById('dmMessages');
     msgs.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading…</div>';
