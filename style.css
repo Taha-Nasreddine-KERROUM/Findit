@@ -511,3 +511,44 @@ button { cursor: pointer; font-family: inherit; }
     line-height: 1.5; margin-top: 4px;
 }
 .comment-edit-input:focus { outline: none; border-color: var(--accent); }
+
+/* ── COMMENT VOTES ── */
+.vote-btns {
+    display: flex; align-items: center; gap: 3px;
+}
+.vote-btn {
+    background: none; border: none; padding: 2px 4px; cursor: pointer;
+    color: var(--muted); border-radius: 4px; line-height: 1;
+    transition: color 0.12s, background 0.12s;
+    display: flex; align-items: center;
+}
+.vote-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+.vote-btn.voted-up   { color: var(--accent); }
+.vote-btn.voted-down { color: var(--danger); }
+.vote-count {
+    font-size: 11px; font-weight: 600; min-width: 14px; text-align: center;
+}
+
+/* ── REPLY TOGGLE ── */
+.replies-toggle {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 7px; cursor: pointer; user-select: none;
+}
+.replies-toggle-line {
+    width: 18px; height: 1px; background: var(--border); flex-shrink: 0;
+}
+.replies-toggle-label {
+    font-size: 11px; font-weight: 600; color: var(--accent); opacity: 0.8;
+    transition: opacity 0.12s;
+}
+.replies-toggle:hover .replies-toggle-label { opacity: 1; }
+
+/* ── REPLY INDENT ── */
+.replies {
+    display: flex; flex-direction: column; gap: 8px;
+    margin-top: 8px; padding-left: 2px;
+}
+.comment-reply {
+    padding-left: 10px;
+    border-left: 2px solid var(--border);
+}
