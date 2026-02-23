@@ -326,13 +326,12 @@ function renderComments(comments) {
         scroll.innerHTML = '<div style="text-align:center;padding:30px 20px;color:var(--muted);font-size:13px">No comments yet. Be the first!</div>';
         return;
     }
-    // Only top-level (no parent)
-    const top = comments.filter(c => !c.parent_id);
+    const top = comments.filter(c => !c.parent_id)
+        .sort((a,b) => (b.net_votes||0) - (a.net_votes||0));
     const byParent = {};
     comments.filter(c => c.parent_id).forEach(c => {
         (byParent[c.parent_id] = byParent[c.parent_id] || []).push(c);
     });
-
     scroll.innerHTML = top.map(c => buildCommentHtml(c, byParent)).join('');
 }
 
@@ -405,6 +404,32 @@ function timeAgo(date) {
 async function deleteComment(commentId) {
     const res = await sb.deleteComment(commentId);
     if (res?.ok) document.querySelector(`.comment[data-comment-id="${commentId}"]`)?.remove();
+}
+
+function toggleReplies(cid, count) {
+    const wrap  = document.getElementById('replies-' + cid);
+    const label = document.getElementById('rtlabel-' + cid);
+    const open  = wrap.style.display !== 'none';
+    wrap.style.display  = open ? 'none' : 'flex';
+    label.textContent   = open
+        ? `▸ ${count} repl${count===1?'y':'ies'}`
+        : `▾ Hide repl${count===1?'y':'ies'}`;
+}
+
+async function castVote(commentId, vote) {
+    if (!App.isLoggedIn) { showToast('Sign in to vote'); return; }
+    const res = await sb.voteComment(commentId, vote);
+    if (!res?.ok) return;
+    // Update UI
+    const countEl = document.getElementById('vcount-' + commentId);
+    if (countEl) {
+        const n = res.net_votes;
+        countEl.textContent = n;
+        countEl.style.color = n > 0 ? 'var(--accent)' : n < 0 ? 'var(--danger)' : 'var(--muted)';
+    }
+    // Re-fetch and re-render to update button states
+    const comments = await sb.getComments(App.openPostId);
+    if (comments) renderComments(comments);
 }
 
 let _openCMenuId = null;
