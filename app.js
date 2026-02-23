@@ -335,36 +335,44 @@ function renderComments(comments) {
     scroll.innerHTML = top.map(c => buildCommentHtml(c, byParent)).join('');
 }
 
-function buildCommentHtml(c, byParent) {
-    const author   = c.author || {};
-    const initials = author.initials || '?';
-    const uid      = author.uid      || 'user';
-    const color    = author.color    || '#5b8dff';
-    const name     = author.name     || uid;
-    const time     = timeAgo(new Date(c.created_at));
-    const replies  = (byParent[c.id] || []).map(r => buildCommentHtml(r, byParent)).join('');
+function buildCommentHtml(c, byParent, isReply = false) {
+    const author     = c.author || {};
+    const initials   = author.initials || '?';
+    const uid        = author.uid      || 'user';
+    const color      = author.color    || '#5b8dff';
+    const name       = author.name     || uid;
+    const time       = timeAgo(new Date(c.created_at));
+    const replyList  = (byParent[c.id] || []);
+    const replyCount = replyList.length;
+    const repliesHtml = replyList.map(r => buildCommentHtml(r, byParent, true)).join('');
 
     const isMyComment = App.isLoggedIn && App.currentUser?.uid === uid;
     const canDelete   = isMyComment || App.isAdmin;
     const canEdit     = isMyComment;
     const canReport   = App.isLoggedIn && !isMyComment && !App.isAdmin;
-    const safeName    = name.replace(/'/g,"\'").replace(/"/g,'&quot;');
-    const safeUid     = uid.replace(/'/g,"\'");
+    const safeName    = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const hasDots     = canDelete || canEdit || canReport;
 
+    // votes
+    const net      = c.net_votes  || 0;
+    const myVote   = c.my_vote    || 0;
+    const voteColor = net > 0 ? 'var(--accent)' : net < 0 ? 'var(--danger)' : 'var(--muted)';
+    const upActive  = myVote ===  1;
+    const downActive= myVote === -1;
+
     const cmenuItems = [
-        canEdit    ? `<div class="card-menu-item" onclick="startEditComment('${c.id}');closeCMenu('${c.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</div>` : '',
-        canDelete  ? `<div class="card-menu-item danger" onclick="deleteComment('${c.id}');closeCMenu('${c.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>Delete</div>` : '',
-        (canEdit||canDelete) && canReport ? '<div class="card-menu-sep"></div>' : '',
-        canReport  ? `<div class="card-menu-item danger" onclick="openCommentReport('${c.id}');closeCMenu('${c.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>Report</div>` : '',
+        canEdit   ? `<div class="card-menu-item" onclick="startEditComment('${c.id}');closeCMenu('${c.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</div>` : '',
+        canDelete ? `<div class="card-menu-item danger" onclick="deleteComment('${c.id}');closeCMenu('${c.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>Delete</div>` : '',
+        (canEdit || canDelete) && canReport ? '<div class="card-menu-sep"></div>' : '',
+        canReport ? `<div class="card-menu-item danger" onclick="openCommentReport('${c.id}');closeCMenu('${c.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>Report</div>` : '',
     ].filter(Boolean).join('');
 
     return `
-    <div class="comment" data-comment-id="${c.id}">
+    <div class="comment ${isReply ? 'comment-reply' : ''}" data-comment-id="${c.id}">
       <div class="comment-avatar" style="background:${color};cursor:pointer"
-           onclick="openProfile('${safeName}','${initials}','${color}','${safeUid}','')">${initials}</div>
+           onclick="openProfile('${safeName}','${initials}','${color}','${uid}','')">${initials}</div>
       <div class="comment-body" style="position:relative">
-        <div class="comment-user" onclick="openProfile('${safeName}','${initials}','${color}','${safeUid}','')"
+        <div class="comment-user" onclick="openProfile('${safeName}','${initials}','${color}','${uid}','')"
              style="cursor:pointer">u/${uid}</div>
         <div class="comment-text" id="ctext-${c.id}">${escHtml(c.body)}</div>
         <div class="comment-edit-form" id="cedit-${c.id}" style="display:none">
@@ -377,10 +385,26 @@ function buildCommentHtml(c, byParent) {
         ${c.image_url ? `<img src="${c.image_url}" style="max-width:160px;max-height:120px;border-radius:8px;margin-top:6px;display:block;object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'160px':'100%';this.style.maxHeight=this.style.maxHeight==='none'?'120px':'none'">` : ''}
         <div class="comment-meta">
           <span class="comment-time">${time}</span>
-          ${App.isLoggedIn ? `<button class="reply-btn" onclick="toggleReply(this,'${c.id}')">Reply</button>` : ''}
+          <div class="vote-btns">
+            <button class="vote-btn${upActive ? ' voted-up' : ''}" onclick="castVote('${c.id}',${upActive ? 0 : 1})" title="Upvote">
+              <svg width="12" height="12" fill="${upActive ? 'var(--accent)' : 'none'}" stroke="${upActive ? 'var(--accent)' : 'currentColor'}" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+            </button>
+            <span class="vote-count" id="vcount-${c.id}" style="color:${voteColor}">${net}</span>
+            <button class="vote-btn${downActive ? ' voted-down' : ''}" onclick="castVote('${c.id}',${downActive ? 0 : -1})" title="Downvote">
+              <svg width="12" height="12" fill="${downActive ? 'var(--danger)' : 'none'}" stroke="${downActive ? 'var(--danger)' : 'currentColor'}" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+          </div>
+          ${!isReply && App.isLoggedIn ? `<button class="reply-btn" onclick="toggleReply(this,'${c.id}')">
+            <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+            Reply${replyCount > 0 ? ` (${replyCount})` : ''}</button>` : ''}
         </div>
         <div class="reply-form" id="reply-form-${c.id}" style="display:none"></div>
-        <div class="replies">${replies}</div>
+        ${replyCount > 0 ? `
+        <div class="replies-toggle" onclick="toggleReplies('${c.id}',${replyCount})">
+          <span class="replies-toggle-line"></span>
+          <span class="replies-toggle-label" id="rtlabel-${c.id}">▸ ${replyCount} repl${replyCount === 1 ? 'y' : 'ies'}</span>
+        </div>
+        <div class="replies" id="replies-${c.id}" style="display:none">${repliesHtml}</div>` : ''}
         ${hasDots ? `
         <button class="dots-btn" style="position:absolute;top:0;right:0;padding:2px 6px;font-size:11px"
                 onclick="toggleCMenu(event,'${c.id}')">•••</button>
