@@ -332,6 +332,9 @@ function renderComments(comments) {
     comments.filter(c => c.parent_id).forEach(c => {
         (byParent[c.parent_id] = byParent[c.parent_id] || []).push(c);
     });
+    // Seed vote state map so castVote has accurate starting points
+    _voteState.clear();
+    comments.forEach(c => _voteState.set(c.id, { myVote: c.my_vote || 0, net: c.net_votes || 0 }));
     scroll.innerHTML = top.map(c => buildCommentHtml(c, byParent)).join('');
 }
 
@@ -392,13 +395,13 @@ function buildCommentHtml(c, byParent, depth = 0) {
           <div class="vote-btns" id="votewrap-${c.id}">
             <button class="vote-btn" id="vup-${c.id}"
               style="color:${myVote===1?'#5b8dff':'#6b7080'}"
-              onclick="castVote(event,'${c.id}',${myVote===1?0:1})">
+              onclick="castVote(event,'${c.id}',1)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="${myVote===1?'#5b8dff':'none'}" stroke="${myVote===1?'#5b8dff':'#6b7080'}" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
             </button>
-            <span class="vote-count" id="vcount-${c.id}" style="color:${voteColor}">${net === 0 ? '0' : net}</span>
+            <span class="vote-count" id="vcount-${c.id}" style="color:${voteColor}">${net}</span>
             <button class="vote-btn" id="vdn-${c.id}"
               style="color:${myVote===-1?'#e05a5a':'#6b7080'}"
-              onclick="castVote(event,'${c.id}',${myVote===-1?0:-1})">
+              onclick="castVote(event,'${c.id}',-1)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="${myVote===-1?'#e05a5a':'none'}" stroke="${myVote===-1?'#e05a5a':'#6b7080'}" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
           </div>
@@ -450,58 +453,55 @@ function toggleReplies(cid, count) {
         : `▾ Hide repl${count===1?'y':'ies'}`;
 }
 
-async function castVote(e, commentId, vote) {
+// Track each comment's current vote state: { myVote, net }
+const _voteState = new Map();
+
+async function castVote(e, commentId, requestedVote) {
     e.stopPropagation();
     if (!App.isLoggedIn) { showToast('Sign in to vote'); return; }
 
-    // Optimistic UI — update immediately before API call
-    const upBtn   = document.getElementById('vup-' + commentId);
-    const dnBtn   = document.getElementById('vdn-' + commentId);
+    const upBtn   = document.getElementById('vup-'   + commentId);
+    const dnBtn   = document.getElementById('vdn-'   + commentId);
     const countEl = document.getElementById('vcount-' + commentId);
     if (!upBtn || !dnBtn || !countEl) return;
 
-    // Read current state from onclick attrs
-    const curNet = parseInt(countEl.textContent) || 0;
-    let newNet = curNet;
-    if (vote === 1)  newNet = curNet + 1;
-    if (vote === -1) newNet = curNet - 1;
-    if (vote === 0)  newNet = curNet + (upBtn.dataset.active==='1' ? -1 : 1); // toggle off
+    // Get current state
+    const state   = _voteState.get(commentId) || { myVote: 0, net: parseInt(countEl.textContent) || 0 };
+    const prevVote = state.myVote;
 
-    // Update count immediately
-    countEl.textContent = newNet;
-    countEl.style.color = newNet > 0 ? '#5b8dff' : newNet < 0 ? '#e05a5a' : '#6b7080';
+    // Clicking same vote again = remove it (toggle off)
+    const newVote = requestedVote === prevVote ? 0 : requestedVote;
 
-    // Update button styles
-    const upActive = vote === 1;
-    const dnActive = vote === -1;
-    upBtn.style.color = upActive ? '#5b8dff' : '#6b7080';
-    upBtn.querySelector('svg').setAttribute('fill', upActive ? '#5b8dff' : 'none');
-    upBtn.querySelector('svg').setAttribute('stroke', upActive ? '#5b8dff' : '#6b7080');
-    dnBtn.style.color = dnActive ? '#e05a5a' : '#6b7080';
-    dnBtn.querySelector('svg').setAttribute('fill', dnActive ? '#e05a5a' : 'none');
-    dnBtn.querySelector('svg').setAttribute('stroke', dnActive ? '#e05a5a' : '#6b7080');
+    // Calculate new net: remove previous contribution, add new
+    const newNet = state.net - prevVote + newVote;
 
-    // Update onclick for next click (toggle logic)
-    upBtn.setAttribute('onclick', `castVote(event,'${commentId}',${upActive ? 0 : 1})`);
-    dnBtn.setAttribute('onclick', `castVote(event,'${commentId}',${dnActive ? 0 : -1})`);
+    // Store new state
+    _voteState.set(commentId, { myVote: newVote, net: newNet });
 
-    // Fire API in background
-    const res = await sb.voteComment(commentId, vote);
+    // Update UI immediately (optimistic)
+    applyVoteUI(upBtn, dnBtn, countEl, newVote, newNet);
+
+    // Send to server
+    const res = await sb.voteComment(commentId, newVote);
     if (res?.ok) {
-        // Sync with server values
-        const sv = res.net_votes;
-        countEl.textContent = sv;
-        countEl.style.color = sv > 0 ? '#5b8dff' : sv < 0 ? '#e05a5a' : '#6b7080';
-        const mv = res.my_vote;
-        upBtn.style.color = mv===1 ? '#5b8dff' : '#6b7080';
-        upBtn.querySelector('svg').setAttribute('fill', mv===1 ? '#5b8dff' : 'none');
-        upBtn.querySelector('svg').setAttribute('stroke', mv===1 ? '#5b8dff' : '#6b7080');
-        dnBtn.style.color = mv===-1 ? '#e05a5a' : '#6b7080';
-        dnBtn.querySelector('svg').setAttribute('fill', mv===-1 ? '#e05a5a' : 'none');
-        dnBtn.querySelector('svg').setAttribute('stroke', mv===-1 ? '#e05a5a' : '#6b7080');
-        upBtn.setAttribute('onclick', `castVote(event,'${commentId}',${mv===1?0:1})`);
-        dnBtn.setAttribute('onclick', `castVote(event,'${commentId}',${mv===-1?0:-1})`);
+        // Sync with server truth
+        const sv = res.net_votes, mv = res.my_vote;
+        _voteState.set(commentId, { myVote: mv, net: sv });
+        applyVoteUI(upBtn, dnBtn, countEl, mv, sv);
     }
+}
+
+function applyVoteUI(upBtn, dnBtn, countEl, myVote, net) {
+    countEl.textContent = net;
+    countEl.style.color = net > 0 ? '#5b8dff' : net < 0 ? '#e05a5a' : '#6b7080';
+
+    const upOn = myVote === 1, dnOn = myVote === -1;
+    upBtn.style.color = upOn ? '#5b8dff' : '#6b7080';
+    upBtn.querySelector('svg').setAttribute('fill',   upOn ? '#5b8dff' : 'none');
+    upBtn.querySelector('svg').setAttribute('stroke', upOn ? '#5b8dff' : '#6b7080');
+    dnBtn.style.color = dnOn ? '#e05a5a' : '#6b7080';
+    dnBtn.querySelector('svg').setAttribute('fill',   dnOn ? '#e05a5a' : 'none');
+    dnBtn.querySelector('svg').setAttribute('stroke', dnOn ? '#e05a5a' : '#6b7080');
 }
 
 let _openCMenuId = null;
@@ -511,8 +511,31 @@ function toggleCMenu(e, cid) {
     const menu = document.getElementById('cmenu-' + cid);
     if (!menu) return;
     const isOpen = menu.classList.contains('open');
-    menu.classList.toggle('open', !isOpen);
-    _openCMenuId = isOpen ? null : cid;
+    if (isOpen) { closeCMenu(cid); return; }
+
+    // Detect space: flip menu above or below the button
+    const btn     = e.target.closest('button') || e.target;
+    const btnRect = btn.getBoundingClientRect();
+    const panel  = document.getElementById('commentsPanel');
+    const panelRect = panel ? panel.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+    const spaceAbove = btnRect.top - panelRect.top;
+    const spaceBelow = panelRect.bottom - btnRect.bottom;
+    const menuH  = 120; // approx menu height
+
+    if (spaceAbove < menuH && spaceBelow > menuH) {
+        // flip to open downward
+        menu.style.bottom = 'auto';
+        menu.style.top    = '28px';
+        menu.style.transformOrigin = 'top right';
+    } else {
+        // default: open upward
+        menu.style.top    = 'auto';
+        menu.style.bottom = '28px';
+        menu.style.transformOrigin = 'bottom right';
+    }
+
+    menu.classList.add('open');
+    _openCMenuId = cid;
 }
 function closeCMenu(cid) {
     document.getElementById('cmenu-' + cid)?.classList.remove('open');
