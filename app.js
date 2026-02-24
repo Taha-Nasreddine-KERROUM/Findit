@@ -36,56 +36,88 @@ const App = {
 })();
 
 // ── LIVE POLLING ───────────────────────────────────────────────────────────────
-let _pollInterval      = null;
-let _latestPostTs      = '';      // ISO timestamp of newest post we know about
-let _pendingNewPosts   = [];      // new posts waiting for banner click
-let _dmPollInterval    = null;
+let _pendingNewPosts = [];      // new posts waiting for banner click
+let _dmUnreadCount   = 0;
+let _postSSE         = null;    // EventSource for new posts
+let _dmSSE           = null;    // EventSource for DM notifications
 
+// ── SSE CONNECTIONS ────────────────────────────────────────────────────────────
 function startPolling() {
-    // Set baseline timestamp from current posts
-    if (POSTS.length) {
-        _latestPostTs = POSTS.reduce((max, p) => {
-            const ts = p._raw_ts || '';
-            return ts > max ? ts : max;
-        }, '');
-    }
-    // Poll for new posts every 12 seconds
-    _pollInterval = setInterval(pollNewPosts, 12000);
-    // Poll DM unread count every 8 seconds (only when logged in)
-    _dmPollInterval = setInterval(pollDMBadge, 8000);
-    // Initial DM badge check
-    pollDMBadge();
+    connectPostSSE();
+    pollDMBadge();  // initial badge check
 }
 
-async function pollNewPosts() {
-    if (!_latestPostTs) {
-        // No baseline — use current oldest known timestamp
-        if (POSTS.length) {
-            _latestPostTs = POSTS[0]?._raw_ts || new Date().toISOString();
-        } else {
-            _latestPostTs = new Date().toISOString();
-        }
-        return;
-    }
-    const rows = await sb.getPostsSince(_latestPostTs);
-    if (!rows || !rows.length) return;
+function connectPostSSE() {
+    if (_postSSE) { _postSSE.close(); }
+    const url = sb.API_BASE + '/stream?channel=all';
+    _postSSE = new EventSource(url);
+    _postSSE.onmessage = (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'new_post') onNewPostSSE(data.post);
+        } catch {}
+    };
+    _postSSE.onerror = () => {
+        // Reconnect after 3s on error
+        _postSSE.close();
+        setTimeout(connectPostSSE, 3000);
+    };
+}
 
-    // Filter out posts we already have (e.g. ones we just created)
+function connectDMSSE(myUid) {
+    if (_dmSSE) { _dmSSE.close(); }
+    const url = sb.API_BASE + `/stream?channel=dm:${encodeURIComponent(myUid)}`;
+    _dmSSE = new EventSource(url);
+    _dmSSE.onmessage = (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'new_dm') onNewDMSSE(data);
+        } catch {}
+    };
+    _dmSSE.onerror = () => {
+        _dmSSE.close();
+        setTimeout(() => connectDMSSE(myUid), 3000);
+    };
+}
+
+function onNewPostSSE(rawPost) {
     const knownIds = new Set(POSTS.map(p => p.id));
-    const truly_new = rows.filter(r => !knownIds.has(r.id));
-    if (!truly_new.length) return;
-
-    // Update latest timestamp
-    _latestPostTs = truly_new[0].created_at;  // rows sorted DESC so [0] is newest
-
-    // Map to card objects
-    const newCards = truly_new.map(mapRow);
-
-    // Store pending — don't inject into feed yet
-    _pendingNewPosts = [...newCards, ..._pendingNewPosts];
-
-    // Show banner
+    if (knownIds.has(rawPost.id)) return;   // already have it (our own post)
+    const card = mapRow(rawPost);
+    _pendingNewPosts.unshift(card);
     showNewPostsBanner(_pendingNewPosts.length);
+}
+
+function onNewDMSSE(data) {
+    const dmSheet = document.getElementById('dmSheet');
+    const threadVisible = document.getElementById('dmThread')?.style.display !== 'none';
+
+    if (dmSheet?.classList.contains('open') && threadVisible && _dmOtherUid === data.from_uid) {
+        // Thread with this person is open — append message live
+        appendDMMessage(data.msg, false);
+    } else {
+        // Sheet closed or different thread — bump badge
+        _dmUnreadCount++;
+        updateDMBadge(_dmUnreadCount);
+    }
+}
+
+function appendDMMessage(msg, isMe) {
+    const msgs = document.getElementById('dmMessages');
+    if (!msgs) return;
+    const atBottom = msgs.scrollHeight - msgs.clientHeight - msgs.scrollTop < 60;
+    const div = document.createElement('div');
+    div.className = `dm-msg ${isMe ? 'me' : 'them'}`;
+    const imgHtml = msg.image_url
+        ? `<img src="${msg.image_url}" style="max-width:180px;max-height:160px;border-radius:8px;display:block;margin-top:${msg.body?'6px':'0'};object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'180px':'100%'">`
+        : '';
+    div.innerHTML = (msg.body ? escHtml(msg.body) : '') + imgHtml +
+        `<div class="dm-msg-time">just now</div>`;
+    // Remove "no messages" placeholder if present
+    const placeholder = msgs.querySelector('div[style*="text-align:center"]');
+    if (placeholder) placeholder.remove();
+    msgs.appendChild(div);
+    if (atBottom) msgs.scrollTop = msgs.scrollHeight;
 }
 
 function showNewPostsBanner(count) {
@@ -98,19 +130,14 @@ function showNewPostsBanner(count) {
 }
 
 function dismissNewPosts() {
-    // Prepend new posts to POSTS array and re-render
     if (_pendingNewPosts.length) {
         const knownIds = new Set(POSTS.map(p => p.id));
         const fresh = _pendingNewPosts.filter(p => !knownIds.has(p.id));
         POSTS = [...fresh, ...POSTS];
         renderFeed();
-        // Scroll feed to top smoothly
-        const feed = document.getElementById('feed');
-        if (feed) feed.scrollIntoView({ behavior: 'smooth', block: 'start' });
         window.scrollTo({ top: 0, behavior: 'smooth' });
         _pendingNewPosts = [];
     }
-    // Hide banner
     const banner = document.getElementById('newPostsBanner');
     if (banner) {
         banner.classList.remove('visible');
@@ -120,11 +147,11 @@ function dismissNewPosts() {
 
 async function pollDMBadge() {
     if (!App.isLoggedIn) { updateDMBadge(0); return; }
-    // Don't show badge if DM sheet is open
     const dmSheet = document.getElementById('dmSheet');
     if (dmSheet?.classList.contains('open')) { updateDMBadge(0); return; }
     const res = await sb.getUnreadCount();
-    updateDMBadge(res?.count || 0);
+    _dmUnreadCount = res?.count || 0;
+    updateDMBadge(_dmUnreadCount);
 }
 
 function updateDMBadge(count) {
@@ -177,6 +204,8 @@ function setUser(me) {
     };
     App.isAdmin      = ['admin','super_admin'].includes(p.role);
     App.isSuperAdmin = p.role === 'super_admin';
+    // Connect DM SSE for this user
+    connectDMSSE(p.uid);
 }
 
 // ── RENDER ENGINE ─────────────────────────────────────────────────────────────
@@ -914,7 +943,6 @@ async function openDMSheet() {
 
 async function showDMInbox() {
     _dmOtherUid = null;
-    clearInterval(_dmThreadPollInterval);
     document.getElementById('dmInbox').style.display  = 'flex';
     document.getElementById('dmInbox').style.flexDirection = 'column';
     document.getElementById('dmThread').style.display = 'none';
@@ -942,9 +970,6 @@ async function showDMInbox() {
     </div>`).join('');
 }
 
-let _dmThreadPollInterval = null;
-let _lastDMTs = '';
-
 async function openDMThread(otherUid, name, initials, color) {
     _dmOtherUid = otherUid;
     document.getElementById('dmInbox').style.display  = 'none';
@@ -965,30 +990,8 @@ async function openDMThread(otherUid, name, initials, color) {
     if (!data) { msgs.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Could not load messages</div>'; return; }
 
     renderDMMessages(data.messages);
-    _lastDMTs = data.messages.length ? data.messages[data.messages.length - 1].created_at : '';
     document.getElementById('dmInput').focus();
-
-    // Start live polling for this thread every 4 seconds
-    clearInterval(_dmThreadPollInterval);
-    _dmThreadPollInterval = setInterval(() => pollDMThread(otherUid), 4000);
-}
-
-async function pollDMThread(otherUid) {
-    // Stop if thread closed
-    if (document.getElementById('dmThread').style.display === 'none') {
-        clearInterval(_dmThreadPollInterval);
-        return;
-    }
-    const data = await sb.getDMThread(otherUid);
-    if (!data?.messages?.length) return;
-    const latest = data.messages[data.messages.length - 1].created_at;
-    if (latest === _lastDMTs) return;  // no new messages
-    _lastDMTs = latest;
-    // Check if scrolled to bottom before re-render
-    const msgs = document.getElementById('dmMessages');
-    const atBottom = msgs.scrollHeight - msgs.clientHeight - msgs.scrollTop < 60;
-    renderDMMessages(data.messages);
-    if (atBottom) msgs.scrollTop = msgs.scrollHeight;
+    // DM messages arrive live via SSE (_dmSSE) — no polling needed
 }
 
 function renderDMMessages(messages) {
@@ -1054,7 +1057,6 @@ async function sendDMClick() {
 
 function closeDM() {
     document.getElementById('dmSheet').classList.remove('open');
-    clearInterval(_dmThreadPollInterval);
     // Re-poll badge after closing (messages may have been read)
     setTimeout(pollDMBadge, 500);
     document.body.style.overflow = '';
