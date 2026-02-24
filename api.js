@@ -147,6 +147,7 @@ const sb = (() => {
         return api(`/dms/${otherUid}`, { method:'POST', body: JSON.stringify(payload) });
     }
     async function getUnreadCount()         { return api('/dms/unread/count'); }
+    async function getPostsSince(ts)        { return api(`/posts/since?ts=${encodeURIComponent(ts)}`); }
 
     // ── ALERTS ────────────────────────────────────────────────────────────────
     async function sendAlert(targetUid, note) {
@@ -200,7 +201,7 @@ const sb = (() => {
         getPosts, createPost, updatePost, deletePost,
         getComments, createComment, uploadImage,
         getStats, setRole, banUser, unbanUser,
-        getConversations, getDMThread, sendDM, getUnreadCount,
+        getConversations, getDMThread, sendDM, getUnreadCount, getPostsSince,
         deleteComment, editComment, reportComment, voteComment,
         sendAlert, getAlerts, reportPost, deleteReport, getReports,
         submitAdminRequest, getPendingRequests, reviewRequest, logAction, getModLogs,
