@@ -184,7 +184,7 @@ button { cursor: pointer; font-family: inherit; }
 .dots-btn:hover { background: rgba(255,255,255,0.05); color: var(--text); }
 
 .card-menu {
-    position: absolute; right: 10px; bottom: 44px; z-index: 50;
+    position: absolute; right: 0; bottom: 28px; z-index: 200;
     background: var(--surface2); border: 1px solid var(--border);
     border-radius: 12px; padding: 5px; min-width: 150px;
     box-shadow: 0 8px 28px rgba(0,0,0,0.5);
