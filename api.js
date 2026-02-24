@@ -2,7 +2,7 @@
 //  FindIt – API Client
 //  Replace API_URL with your Hugging Face Space URL.
 // ============================================================
-const API_URL = 'https://TiH0-findit-backend.hf.space';
+const API_URL = 'https://YOUR-USERNAME-findit-backend.hf.space';
 
 const sb = (() => {
     let _token = localStorage.getItem('fi_token') || null;
@@ -195,6 +195,7 @@ const sb = (() => {
     async function sendMagicLink()      { return null; }
 
     return {
+        API_BASE: API_URL,
         register, login,
         handleCallback, restoreSession, signOut, getMe,
         getProfileStats, getPostsByUser, getAllUsers, updateProfile,
