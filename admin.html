@@ -425,9 +425,6 @@
         document.getElementById('overviewRequests').style.display = 'none';
     }
     loadOverview();
-  }
-
-    loadOverview();
     connectAdminSSE();
   }
 
@@ -617,7 +614,7 @@
       <td>
         <div style="display:flex;flex-direction:column;gap:2px">
           <span style="font-weight:600">${u.points ?? 0}</span>
-          ${u.vote_score > 0 ? `<span style="font-size:10px;color:#5b8dff">+${u.vote_score} votes</span>` : ''}
+          ${u.vote_score > 0 ? '<span style="font-size:10px;color:#5b8dff">+' + u.vote_score + ' votes</span>' : ''}
         </div>
       </td>
       <td>${formatDate(u.created_at)}</td>
