@@ -78,6 +78,8 @@ function connectCommentSSE(postId) {
     };
     _commentSSE.onerror = () => {
         if (_commentSSE) { _commentSSE.close(); _commentSSE = null; }
+        // Reconnect after 3s as long as this post is still open
+        if (App.openPostId === postId) setTimeout(() => connectCommentSSE(postId), 3000);
     };
 }
 
@@ -108,13 +110,13 @@ function onNewPostSSE(rawPost) {
 }
 
 function onNewCommentSSE(comment) {
-    // Only apply if this post is open
     if (App.openPostId !== comment.post_id) return;
-    // If we just sent this comment ourselves, skip (we already rendered it)
+    // Skip if we just sent this ourselves
     if (App.isLoggedIn && comment.author?.uid === App.currentUser?.uid) return;
-    // Re-fetch to get accurate vote state and full tree
+    // Re-fetch full comment list (for accurate vote state and full nesting)
     sb.getComments(comment.post_id).then(comments => {
-        if (comments && App.openPostId === comment.post_id) renderComments(comments);
+        if (!Array.isArray(comments)) return;
+        if (App.openPostId === comment.post_id) renderComments(comments);
     });
 }
 
@@ -488,7 +490,7 @@ async function openComments(postId) {
 
 function renderComments(comments) {
     const scroll = document.getElementById('commentsScroll');
-    if (!comments.length) {
+    if (!Array.isArray(comments) || !comments.length) {
         scroll.innerHTML = '<div style="text-align:center;padding:30px 20px;color:var(--muted);font-size:13px">No comments yet. Be the first!</div>';
         return;
     }
