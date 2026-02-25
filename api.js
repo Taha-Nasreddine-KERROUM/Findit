@@ -107,7 +107,10 @@ const sb = (() => {
     }
 
     // ── COMMENTS ──────────────────────────────────────────────────────────────
-    async function getComments(postId) { return api(`/posts/${postId}/comments`) || []; }
+    async function getComments(postId) {
+        const r = await api(`/posts/${postId}/comments`);
+        return Array.isArray(r) ? r : [];
+    }
 
     async function createComment(postId, body, parentId = null, imageUrl = null) {
         const payload = { body };
