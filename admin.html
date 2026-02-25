@@ -427,6 +427,37 @@
     loadOverview();
   }
 
+    loadOverview();
+    connectAdminSSE();
+  }
+
+  let _adminSSE = null;
+  function connectAdminSSE() {
+    if (_adminSSE) _adminSSE.close();
+    const url = sb.API_BASE + '/stream?channel=admin';
+    _adminSSE = new EventSource(url);
+    _adminSSE.onmessage = (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            const activePanel = document.querySelector('.nav-item.active')?.dataset?.panel;
+            if (data.type === 'new_request') {
+                const badge = document.getElementById('reqBadge');
+                if (badge) { badge.style.display = 'flex'; badge.textContent = '!'; }
+                if (activePanel === 'requests') loadRequests();
+                else if (activePanel === 'overview') loadOverview();
+            }
+            if (data.type === 'request_reviewed') {
+                if (activePanel === 'requests') loadRequests();
+                else if (activePanel === 'overview') loadOverview();
+            }
+            if (data.type === 'new_log') {
+                if (activePanel === 'logs') loadLogs();
+            }
+        } catch {}
+    };
+    _adminSSE.onerror = () => { _adminSSE.close(); setTimeout(connectAdminSSE, 3000); };
+  }
+
   async function adminSignOut() {
     await sb.signOut();
     window.location.href = 'index.html';
@@ -583,7 +614,12 @@
       </td>
       <td>${roleBadge}</td>
       <td>${statusBadge}</td>
-      <td>${u.points}</td>
+      <td>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span style="font-weight:600">${u.points ?? 0}</span>
+          ${u.vote_score > 0 ? `<span style="font-size:10px;color:#5b8dff">+${u.vote_score} votes</span>` : ''}
+        </div>
+      </td>
       <td>${formatDate(u.created_at)}</td>
       <td>
         <div class="actions">
