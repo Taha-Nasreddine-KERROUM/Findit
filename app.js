@@ -47,6 +47,8 @@ function startPolling() {
     pollDMBadge();  // initial badge check
 }
 
+let _commentSSE = null;
+
 function connectPostSSE() {
     if (_postSSE) { _postSSE.close(); }
     const url = sb.API_BASE + '/stream?channel=all';
@@ -54,13 +56,28 @@ function connectPostSSE() {
     _postSSE.onmessage = (e) => {
         try {
             const data = JSON.parse(e.data);
-            if (data.type === 'new_post') onNewPostSSE(data.post);
+            if (data.type === 'new_post')    onNewPostSSE(data.post);
+            if (data.type === 'new_comment') onNewCommentSSE(data.comment);
         } catch {}
     };
     _postSSE.onerror = () => {
-        // Reconnect after 3s on error
         _postSSE.close();
         setTimeout(connectPostSSE, 3000);
+    };
+}
+
+function connectCommentSSE(postId) {
+    if (_commentSSE) { _commentSSE.close(); _commentSSE = null; }
+    const url = sb.API_BASE + `/stream?channel=post:${encodeURIComponent(postId)}`;
+    _commentSSE = new EventSource(url);
+    _commentSSE.onmessage = (e) => {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'new_comment') onNewCommentSSE(data.comment);
+        } catch {}
+    };
+    _commentSSE.onerror = () => {
+        if (_commentSSE) { _commentSSE.close(); _commentSSE = null; }
     };
 }
 
@@ -82,10 +99,23 @@ function connectDMSSE(myUid) {
 
 function onNewPostSSE(rawPost) {
     const knownIds = new Set(POSTS.map(p => p.id));
-    if (knownIds.has(rawPost.id)) return;   // already have it (our own post)
+    if (knownIds.has(rawPost.id)) return;  // already have it (we just posted it)
+    // Don't show banner to the person who just posted
+    if (App.isLoggedIn && rawPost.author_uid === App.currentUser?.uid) return;
     const card = mapRow(rawPost);
     _pendingNewPosts.unshift(card);
     showNewPostsBanner(_pendingNewPosts.length);
+}
+
+function onNewCommentSSE(comment) {
+    // Only apply if this post is open
+    if (App.openPostId !== comment.post_id) return;
+    // If we just sent this comment ourselves, skip (we already rendered it)
+    if (App.isLoggedIn && comment.author?.uid === App.currentUser?.uid) return;
+    // Re-fetch to get accurate vote state and full tree
+    sb.getComments(comment.post_id).then(comments => {
+        if (comments && App.openPostId === comment.post_id) renderComments(comments);
+    });
 }
 
 function onNewDMSSE(data) {
@@ -450,6 +480,7 @@ async function openComments(postId) {
     if (USE_SUPABASE) {
         const comments = await sb.getComments(postId);
         renderComments(comments || []);
+        connectCommentSSE(postId);
     } else {
         renderComments([]);
     }
@@ -725,6 +756,7 @@ function closeComments() {
     document.getElementById('overlay').classList.remove('show');
     document.body.style.overflow='';
     App.openPostId = null;
+    if (_commentSSE) { _commentSSE.close(); _commentSSE = null; }
 }
 
 function toggleReply(btn, parentId) {
