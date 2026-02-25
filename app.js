@@ -144,7 +144,7 @@ function appendDMMessage(msg, isMe) {
         ? `<img src="${msg.image_url}" style="max-width:180px;max-height:160px;border-radius:8px;display:block;margin-top:${msg.body?'6px':'0'};object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'180px':'100%'">`
         : '';
     div.innerHTML = (msg.body ? escHtml(msg.body) : '') + imgHtml +
-        `<div class="dm-msg-time">just now</div>`;
+        ``;
     // Remove "no messages" placeholder if present
     const placeholder = msgs.querySelector('div[style*="text-align:center"]');
     if (placeholder) placeholder.remove();
@@ -1037,7 +1037,7 @@ function renderDMMessages(messages) {
     msgs.innerHTML = messages.map(m => {
         const isMe = m.sender_uid === App.currentUser?.uid;
         const imgHtml = m.image_url ? `<img src="${m.image_url}" style="max-width:180px;max-height:160px;border-radius:8px;display:block;margin-top:${m.body?'6px':'0'};object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'180px':'100%'">` : '';
-        return `<div class="dm-msg ${isMe ? 'me' : 'them'}">${m.body ? escHtml(m.body) : ''}${imgHtml}<div class="dm-msg-time">${timeAgo(new Date(m.created_at))}</div></div>`;
+        return `<div class="dm-msg ${isMe ? 'me' : 'them'}">${m.body ? escHtml(m.body) : ''}${imgHtml}</div>`;
     }).join('');
     msgs.scrollTop = msgs.scrollHeight;
 }
@@ -1083,7 +1083,7 @@ async function sendDMClick() {
         if (empty) empty.remove();
         const div = document.createElement('div');
         div.className = 'dm-msg me';
-        div.innerHTML = `${body ? escHtml(body) : ''}${imageUrl ? `<img src="${imageUrl}" style="max-width:180px;max-height:160px;border-radius:8px;display:block;margin-top:${body?'6px':'0'};object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'180px':'100%'">` : ''}<div class="dm-msg-time">just now</div>`;
+        div.innerHTML = `${body ? escHtml(body) : ''}${imageUrl ? `<img src="${imageUrl}" style="max-width:180px;max-height:160px;border-radius:8px;display:block;margin-top:${body?'6px':'0'};object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'180px':'100%'">` : ''}`;
         msgs.appendChild(div);
         msgs.scrollTop = msgs.scrollHeight;
     }
