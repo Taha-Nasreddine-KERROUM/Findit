@@ -1679,7 +1679,6 @@ function openImgSearch() {
     document.getElementById('imgPreview').style.display = 'none';
     document.getElementById('imgDropPlaceholder').style.display = '';
     document.getElementById('imgSearchRunBtn').disabled = true;
-    document.getElementById('imgSearchResults').innerHTML = '';
     document.querySelectorAll('#imgFilterRow .filter-chip').forEach(c => c.classList.remove('active'));
     document.querySelector('#imgFilterRow [data-imgf="all"]').classList.add('active');
     document.getElementById('imgSearchBg').classList.add('open');
