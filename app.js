@@ -217,7 +217,7 @@ function mapRow(r) {
         date:          dateStr,
         comments:      Number(r.comment_count) || 0,
         hasImage:      !!r.image_url,
-        _imageUrl:     r.image_url || null,
+        _imageUrl:     r.image_url ? (r.image_url.startsWith('http') ? r.image_url : sb.API_BASE + r.image_url) : null,
         _raw_ts:       r.created_at || '',
     };
 }
@@ -1304,7 +1304,7 @@ async function submitPost() {
                     return;
                 }
                 imageUrlPath = uploadRes.url;                  // e.g. /images/abc.jpg
-                imageUrl     = sb.API_BASE + uploadRes.url;   // full URL for display
+                imageUrl     = uploadRes.fullUrl;              // full URL for display
                 btn.textContent = 'Posting…';
             } else {
                 btn.textContent = 'Posting…'; btn.disabled = true;
