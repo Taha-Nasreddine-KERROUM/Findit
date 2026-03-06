@@ -197,6 +197,66 @@ const sb = (() => {
     // Keep old name as alias for boot sequence
     async function sendMagicLink()      { return null; }
 
+    // ── IMAGE AI ──────────────────────────────────────────────────────────────
+
+    /**
+     * Feature 3: Upload image with NSFW check + pre-compute DINOv2 embedding.
+     * Use this instead of uploadImage() when creating a post.
+     * Returns { url } or throws with a user-facing message.
+     */
+    async function uploadImageChecked(dataUrl) {
+        const [meta, b64] = dataUrl.split(',');
+        const mime = meta.match(/:(.*?);/)[1];
+        const ext  = mime.split('/')[1].replace('jpeg','jpg');
+        const bin  = atob(b64);
+        const arr  = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        const form = new FormData();
+        form.append('file', new Blob([arr], {type: mime}), `upload.${ext}`);
+        const r = await fetch(`${API_URL}/upload/checked`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${_token}` },
+            body: form,
+        });
+        if (r.status === 422) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(err.detail || 'Image rejected: inappropriate content');
+        }
+        if (!r.ok) throw new Error('Upload failed');
+        return await r.json();   // { url }
+    }
+
+    /**
+     * Feature 2: Create post via /posts/ai — saves embedding + triggers auto-match SSE.
+     * Use instead of createPost() when post has an image.
+     */
+    async function createPostAI(fields) {
+        const res = await api('/posts/ai', { method: 'POST', body: JSON.stringify(fields) });
+        return res && !res._error ? [res] : null;
+    }
+
+    /**
+     * Feature 1: Search posts by image similarity.
+     * file      = File object (from input or drop)
+     * statusFilter = 'all'|'lost'|'found'|'waiting'|'recovered'
+     * Returns array of post objects with extra .similarity field (0–1).
+     */
+    async function searchByImage(file, statusFilter = 'all') {
+        const form = new FormData();
+        form.append('file', file);
+        try {
+            const r = await fetch(`${API_URL}/search/image?status_filter=${encodeURIComponent(statusFilter)}`, {
+                method: 'POST',
+                body: form,
+            });
+            if (!r.ok) return [];
+            return await r.json();
+        } catch(e) {
+            console.error('[searchByImage]', e);
+            return [];
+        }
+    }
+
     return {
         API_BASE: API_URL,
         register, login,
@@ -204,6 +264,7 @@ const sb = (() => {
         getProfileStats, getPostsByUser, getAllUsers, updateProfile,
         getPosts, createPost, updatePost, deletePost,
         getComments, createComment, uploadImage,
+        uploadImageChecked, createPostAI, searchByImage,
         getStats, setRole, banUser, unbanUser,
         getConversations, getDMThread, sendDM, getUnreadCount, getPostsSince,
         deleteComment, editComment, reportComment, voteComment,
