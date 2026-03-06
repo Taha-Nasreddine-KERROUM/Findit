@@ -11,15 +11,62 @@
 
 <!-- ── TOPBAR ── -->
 <div class="topbar">
-    <button class="circle-btn logo-btn" onclick="goHome()"><span>Fi</span></button>
+    <button class="circle-btn logo-btn" onclick="toggleMatchPanel()" id="logoBtn" title="Image matches"><span>Fi</span><span class="match-badge" id="matchBadge" style="display:none"></span></button>
     <div class="search-island">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <input type="text" id="searchInput" placeholder="Search items, places, people…" autocomplete="off">
         <button class="search-clear" id="searchClear" aria-label="Clear search">✕</button>
+        <button class="img-search-btn" id="imgSearchBtn" onclick="openImageSearch()" title="Search by image">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </button>
     </div>
     <button class="circle-btn menu-btn" id="menuBtn" onclick="toggleMenu()">
         <div class="bar"></div><div class="bar"></div><div class="bar"></div>
     </button>
+</div>
+
+<!-- ── MATCH PANEL (floating list from logo) ── -->
+<div class="match-panel" id="matchPanel" style="display:none">
+    <div class="match-panel-header">
+        <span>🔍 Image Matches</span>
+        <button onclick="closeMatchPanel()">✕</button>
+    </div>
+    <div id="matchPanelList"></div>
+</div>
+
+<!-- ── IMAGE SEARCH MODAL ── -->
+<div class="modal-overlay img-search-overlay" id="imgSearchOverlay" onclick="closeImageSearch()"></div>
+<div class="modal img-search-modal" id="imgSearchModal">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px">Search by Image</span>
+        <button class="sheet-close-btn" onclick="closeImageSearch()">✕</button>
+    </div>
+    <!-- drop zone -->
+    <div class="img-drop-zone" id="imgDropZone"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleImgDrop(event)">
+        <div id="imgDropContent">
+            <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom:10px;opacity:.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <div style="font-size:13px;font-weight:600;margin-bottom:6px">Drop image here</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:12px">or paste (Ctrl+V) or browse</div>
+            <button class="btn-browse" onclick="document.getElementById('imgFileInput').click()">Browse</button>
+            <input type="file" id="imgFileInput" accept="image/*" style="display:none" onchange="handleImgFile(this.files[0])">
+        </div>
+        <img id="imgPreview" style="display:none;max-width:100%;max-height:180px;border-radius:10px;object-fit:contain">
+    </div>
+    <!-- filter -->
+    <div style="margin:14px 0 10px;font-size:12px;font-weight:600;color:var(--muted)">Search in</div>
+    <div style="display:flex;gap:7px;flex-wrap:wrap" id="imgFilterChips">
+        <div class="filter-chip active" data-imgfilter="all" onclick="selectImgFilter(this)">All</div>
+        <div class="filter-chip" data-imgfilter="found" onclick="selectImgFilter(this)">Found</div>
+        <div class="filter-chip" data-imgfilter="lost" onclick="selectImgFilter(this)">Lost</div>
+        <div class="filter-chip" data-imgfilter="waiting" onclick="selectImgFilter(this)">Waiting</div>
+        <div class="filter-chip" data-imgfilter="recovered" onclick="selectImgFilter(this)">Recovered</div>
+    </div>
+    <button class="post-submit-btn" style="margin-top:16px;width:100%" onclick="runImageSearch()" id="imgSearchRunBtn" disabled>Search</button>
+    <!-- results -->
+    <div id="imgSearchResults" style="margin-top:16px"></div>
 </div>
 
 <!-- MENU DROPDOWN -->
@@ -27,6 +74,7 @@
     <div id="menuNotLoggedIn">
         <div class="menu-item login" onclick="openLogin()">Log in / Sign up</div>
         <div class="menu-divider"></div>
+        <div class="menu-item" onclick="toggleMenu()">Settings</div>
     </div>
     <div id="menuLoggedIn" style="display:none">
         <div class="menu-item" style="gap:8px;padding:8px 10px" onclick="openOwnProfile()">
@@ -36,40 +84,30 @@
                 <div style="font-size:11px;color:var(--muted)" id="menuUserHandle">u/me</div>
             </div>
         </div>
-        <div id="adminMenuSection" style="display:none">
-            <div class="menu-divider"></div>
-            <div id="adminMenuItem" class="menu-item" onclick="openAdminDashboard()">
-                <span style="font-size:13px;color:var(--recovered);font-weight:500">Admin Dashboard ↗</span>
-            </div>
-        </div>
         <div class="menu-divider"></div>
+        <div id="adminMenuItem" style="display:none" class="menu-item" onclick="openAdminDashboard()">
+            <span style="font-size:13px;color:var(--recovered);font-weight:500">Admin Dashboard ↗</span>
+        </div>
         <div class="menu-item" onclick="signOut()">Sign out</div>
-        <div id="reqAdminMenuItem" class="menu-item" onclick="openAdminRequestModal()">Request Admin Access</div>
+        <div class="menu-item" onclick="toggleMenu()">Settings</div>
     </div>
 </div>
 
 <!-- ── FILTER CHIPS ── -->
-<div class="search-filters" id="searchFilters">
-    <div class="filter-chip active" data-filter="all" id="chipAll">All</div>
-    <div class="filter-chips-expand" id="filterExpand">
-        <div class="filter-chip" data-filter="found">Found</div>
-        <div class="filter-chip" data-filter="lost">Lost</div>
-        <div class="filter-chip" data-filter="waiting">Waiting</div>
-        <div class="filter-chip" data-filter="recovered">Recovered</div>
-        <div class="filter-chip" data-filter="main library">Library</div>
-        <div class="filter-chip" data-filter="cafeteria">Cafeteria</div>
-        <div class="filter-chip" data-filter="engineering">Engineering</div>
-        <div class="filter-chip" data-filter="dorms">Dorms</div>
-        <div class="filter-chip" data-filter="sports">Sports</div>
-    </div>
+<div class="search-filters">
+    <div class="filter-chip active" data-filter="all">All</div>
+    <div class="filter-chip" data-filter="found">Found</div>
+    <div class="filter-chip" data-filter="lost">Lost</div>
+    <div class="filter-chip" data-filter="waiting">Waiting</div>
+    <div class="filter-chip" data-filter="recovered">Recovered</div>
+    <div class="filter-chip" data-filter="main library">Library</div>
+    <div class="filter-chip" data-filter="cafeteria">Cafeteria</div>
+    <div class="filter-chip" data-filter="engineering">Engineering</div>
+    <div class="filter-chip" data-filter="dorms">Dorms</div>
+    <div class="filter-chip" data-filter="sports">Sports</div>
 </div>
 
 <!-- ── FEED ── -->
-<!-- ── NEW POSTS BANNER ── -->
-<div id="newPostsBanner" onclick="dismissNewPosts()" style="display:none">
-  <span id="newPostsLabel">↑ 1 new post</span>
-</div>
-
 <div class="feed" id="feed"></div>
 
 <!-- EMPTY STATE -->
@@ -80,22 +118,9 @@
 </div>
 
 <!-- ── FAB ── -->
-<div class="fab-island">
-    <button class="fab-dm" onclick="openDMSheet()" title="Messages" style="position:relative;overflow:visible">
-        <div style="position:relative;display:inline-flex;align-items:center;justify-content:center">
-            <svg width="17" height="17" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-            <span id="dmFabBadge" style="display:none;position:absolute;top:-7px;right:-9px;background:#5b8dff;color:#fff;border-radius:50%;min-width:15px;height:15px;font-size:9px;font-weight:700;align-items:center;justify-content:center;padding:0 3px;border:1.5px solid #1a1d24;line-height:1"></span>
-        </div>
-    </button>
-    <div class="fab-divider"></div>
-    <button class="fab-add" onclick="tryPost()" title="New post">
-        <svg width="19" height="19" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-    </button>
-</div>
+<button class="fab-post" onclick="tryPost()">
+    <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+</button>
 
 <!-- OVERLAY (comments) -->
 <div class="overlay" id="overlay" onclick="closeComments()"></div>
@@ -104,7 +129,7 @@
 <div class="toast" id="toast"></div>
 
 <!-- ── COMMENTS PANEL ── -->
-<div class="comments-panel" id="commentsPanel"><div class="sheet-drag-handle" onmousedown="startDrag(event,'commentsPanel')" ontouchstart="startDrag(event,'commentsPanel')"><div class="drag-pill"></div></div>
+<div class="comments-panel" id="commentsPanel">
     <div class="panel-handle">
         <span class="panel-title" id="panelTitle">Comments</span>
         <div class="panel-right">
@@ -115,106 +140,142 @@
             <button class="close-panel" onclick="closeComments()">✕</button>
         </div>
     </div>
-    <div class="comments-scroll" id="commentsScroll"></div>
-    <div id="commentInputWrap" class="comment-input-wrap">
-        <div id="commentImagePreviewWrap" style="display:none;align-items:center;gap:8px;padding:0 0 8px 0">
-            <img id="commentImagePreview" style="max-height:60px;max-width:80px;border-radius:6px;display:block;object-fit:cover">
-            <button onclick="clearCommentImage()" style="background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:10px;line-height:1;flex-shrink:0">✕</button>
+    <div class="comments-scroll" id="commentsScroll">
+        <div class="comment">
+            <div class="comment-avatar" style="background:#4da6ff" onclick="openProfile('Yousef','YS','#4da6ff','yousef_s')">YS</div>
+            <div class="comment-body">
+                <div class="comment-user" onclick="openProfile('Yousef','YS','#4da6ff','yousef_s')">u/yousef_s</div>
+                <div class="comment-text">Could this be mine? I was at the library around 3pm, had my AirPods case in my bag.</div>
+                <div class="comment-meta"><span class="comment-time">2 hours ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
+                <div class="reply-form"></div><div class="replies"></div>
+            </div>
         </div>
-        <div style="display:flex;align-items:center;gap:6px;width:100%">
-            <input type="file" id="commentImageInput" accept="image/*" style="display:none" onchange="handleCommentImageFile(this.files[0])">
-            <button class="action-btn" onclick="document.getElementById('commentImageInput').click()" style="padding:0 8px;flex-shrink:0" title="Attach image">
-                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-            </button>
-            <input class="comment-input" id="commentInput" placeholder="Write a comment…" onkeydown="if(event.key==='Enter')submitCommentClick()">
-            <button class="send-btn" style="flex-shrink:0" onclick="submitCommentClick()">
-                <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            </button>
+        <div class="comment">
+            <div class="comment-avatar" style="background:#22c97a" onclick="openProfile('Amir','AB','#22c97a','amir_b')">AB</div>
+            <div class="comment-body">
+                <div class="comment-user" onclick="openProfile('Amir','AB','#22c97a','amir_b')">u/amir_b</div>
+                <div class="comment-text">@yousef_s DM me with a photo of the case and I'll verify! Library desk will release it to you.</div>
+                <div class="comment-meta"><span class="comment-time">1 hour ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
+                <div class="reply-form"></div><div class="replies"></div>
+            </div>
+        </div>
+        <div class="comment">
+            <div class="comment-avatar" style="background:#a084f5">KM</div>
+            <div class="comment-body">
+                <div class="comment-user">u/khalid_m</div>
+                <div class="comment-text">FindIt has made this so much easier. Hope it reaches the owner!</div>
+                <div class="comment-meta"><span class="comment-time">45 min ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
+                <div class="reply-form"></div><div class="replies"></div>
+            </div>
+        </div>
+        <div class="comment">
+            <div class="comment-avatar" style="background:#ff6b6b">RI</div>
+            <div class="comment-body">
+                <div class="comment-user">u/rana_i</div>
+                <div class="comment-text">Library staff confirmed they have them — spotted when I went to return books!</div>
+                <div class="comment-meta"><span class="comment-time">10 min ago</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div>
+                <div class="reply-form"></div><div class="replies"></div>
+            </div>
         </div>
     </div>
-    <div id="commentLoginPrompt" style="display:none;padding:12px 16px;border-top:1px solid var(--border);text-align:center">
-        <span style="font-size:13px;color:var(--muted)">
-            <a onclick="closeComments();openLogin()" style="color:var(--accent);cursor:pointer;font-weight:500">Sign in</a> to join the conversation
-        </span>
+    <div class="comment-input-wrap">
+        <input class="comment-input" id="commentInput" placeholder="Write a comment…" onkeydown="if(event.key==='Enter')submitCommentClick()">
+        <button class="send-btn" onclick="submitCommentClick()">
+            <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
     </div>
 </div>
 
 <!-- ── PROFILE OVERLAY + SHEET ── -->
 <div class="sheet-overlay" id="profileOverlay" onclick="closeProfile()"></div>
-<div class="bottom-sheet" id="profileSheet"><div class="sheet-drag-handle" onmousedown="startDrag(event,'profileSheet')" ontouchstart="startDrag(event,'profileSheet')"><div class="drag-pill"></div></div>
+<div class="bottom-sheet" id="profileSheet">
     <div class="profile-top-row">
         <div class="profile-left">
             <div class="profile-pic" id="pAvatar" style="background:#4da6ff">AB</div>
             <div>
                 <div class="profile-name" id="pName">Amir B.</div>
-                <div class="profile-handle" id="pHandle">u/amir_b</div><span id="pVerifiedBadge"></span>
+                <div class="profile-handle" id="pHandle">u/amir_b</div>
                 <div class="profile-points" id="pPoints">840 points</div>
             </div>
         </div>
         <button class="sheet-close-btn" onclick="closeProfile()">✕</button>
     </div>
     <div class="profile-stats">
-        <div class="stat"><div class="stat-num" id="pStatPosted">…</div><div class="stat-label">Posted</div></div>
-        <div class="stat"><div class="stat-num" id="pStatReturned">…</div><div class="stat-label">Recovered</div></div>
-        <div class="stat"><div class="stat-num" id="pStatComments">…</div><div class="stat-label">Comments</div></div>
-        <div class="stat" id="pAlertWrap" style="display:none"><div class="stat-num" id="pStatAlerts" style="color:var(--danger)">0</div><div class="stat-label" style="color:var(--danger)">⚠ Alerts</div></div>
+        <div class="stat"><div class="stat-num">23</div><div class="stat-label">Posted</div></div>
+        <div class="stat"><div class="stat-num">18</div><div class="stat-label">Returned</div></div>
+        <div class="stat"><div class="stat-num">5</div><div class="stat-label">Recovered</div></div>
     </div>
     <button class="profile-msg-btn" id="profileMsgBtn" onclick="openDM()">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Message
     </button>
     <div class="activity-label">Activity</div>
-    <div id="profileHistoryList"></div>
+    <div class="activity-item" onclick="openHistoryItem('AirPods Pro – Library','Found on study table row 3. Turned into library desk.','found','Main Library – 2nd Floor','Feb 16','Electronics')">
+        <span class="act-badge" style="background:rgba(34,201,122,0.1);color:var(--found);border:1px solid rgba(34,201,122,0.18)">Found</span>
+        <span style="font-size:13px">AirPods Pro – Library</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:auto">Today</span>
+        <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+    <div class="activity-item" onclick="openHistoryItem('Student ID Card','Found near cashier in cafeteria. Handed to security.','found','Student Cafeteria','Feb 14','ID / Cards')">
+        <span class="act-badge" style="background:rgba(34,201,122,0.1);color:var(--found);border:1px solid rgba(34,201,122,0.18)">Found</span>
+        <span style="font-size:13px">Student ID – Cafeteria</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:auto">3 days ago</span>
+        <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+    <div class="activity-item" onclick="openHistoryItem('Lost wallet – brown leather','Someone had lost their wallet by the vending machines. Helped locate the owner via FindIt DM.','recovered','Engineering Building','Feb 11','Wallet / Bags')">
+        <span class="act-badge" style="background:rgba(232,168,56,0.1);color:var(--recovered);border:1px solid rgba(232,168,56,0.2)">Helped</span>
+        <span style="font-size:13px">Located lost wallet owner</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:auto">1 week ago</span>
+        <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+    <div class="activity-item" onclick="openHistoryItem('Laptop charger – USB-C white','Left in Engineering room 101. Posting for owner to claim.','found','Engineering Building','Feb 3','Electronics')">
+        <span class="act-badge" style="background:rgba(34,201,122,0.1);color:var(--found);border:1px solid rgba(34,201,122,0.18)">Found</span>
+        <span style="font-size:13px">Laptop charger – Engineering</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:auto">2 weeks ago</span>
+        <svg class="chevron-right" width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
 </div>
 
-
+<!-- ── HISTORY ITEM SHEET ── -->
+<div class="bottom-sheet history-sheet" id="historySheet" style="z-index:350">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px" id="hTitle"></div>
+        <button class="sheet-close-btn" onclick="closeHistoryItem()">✕</button>
+    </div>
+    <div style="display:flex;gap:7px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+        <span class="status-badge" id="hStatus"></span>
+        <span class="card-category" id="hCategory"></span>
+        <span class="card-date" id="hDate"></span>
+        <span style="font-size:11px;color:var(--muted)" id="hLocation"></span>
+    </div>
+    <div style="font-size:13px;color:#9ba1b0;line-height:1.6;margin-bottom:16px" id="hDesc"></div>
+    <div style="font-size:11px;color:var(--muted);text-align:center;padding-top:8px;border-top:1px solid var(--border)">Historical post — read only</div>
+</div>
 
 <!-- ── DM SHEET ── -->
 <div class="dm-sheet" id="dmSheet">
-    <div class="sheet-drag-handle" onmousedown="startDrag(event,'dmSheet')" ontouchstart="startDrag(event,'dmSheet')"><div class="drag-pill"></div></div>
-
-    <!-- ── INBOX VIEW ── -->
-    <div id="dmInbox">
-        <div class="dm-header">
-            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;flex:1">Messages</div>
-            <button class="dm-close" onclick="closeDM()">✕</button>
-        </div>
-        <div id="dmConvoList" style="overflow-y:auto;flex:1;padding:8px 0">
-            <div style="text-align:center;padding:32px 0;color:var(--muted);font-size:13px">Loading…</div>
-        </div>
+    <div class="dm-header">
+        <div class="dm-avatar" id="dmAvatar" style="background:#4da6ff">AB</div>
+        <div><div class="dm-name" id="dmName">Amir B.</div><div class="dm-online">online</div></div>
+        <button class="dm-close" onclick="closeDM()">✕</button>
     </div>
-
-    <!-- ── THREAD VIEW ── -->
-    <div id="dmThread" style="display:none;flex-direction:column;flex:1;overflow:hidden">
-        <div class="dm-header">
-            <button onclick="showDMInbox()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 8px 0 0;line-height:1">‹</button>
-            <div class="dm-avatar" id="dmAvatar" style="background:#4da6ff">AB</div>
-            <div style="flex:1"><div class="dm-name" id="dmName">User</div></div>
-            <button class="dm-close" onclick="closeDM()">✕</button>
-        </div>
-        <div class="dm-messages" id="dmMessages"></div>
-        <div class="dm-input-wrap" style="flex-direction:column;gap:0">
-            <div id="dmImagePreviewWrap" style="display:none;align-items:center;gap:8px;padding:6px 12px 0">
-                <img id="dmImagePreview" style="max-height:60px;max-width:80px;border-radius:6px;object-fit:cover">
-                <button onclick="clearDMImage()" style="background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:10px;line-height:1">✕</button>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px;padding:0">
-                <input type="file" id="dmImageInput" accept="image/*" style="display:none" onchange="handleDMImageFile(this.files[0])">
-                <button class="action-btn" onclick="document.getElementById('dmImageInput').click()" style="padding:0 8px;flex-shrink:0" title="Send image">
-                    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                </button>
-                <input class="dm-input" placeholder="Message…" id="dmInput" onkeydown="if(event.key==='Enter')sendDMClick()" style="flex:1;min-width:0">
-                <button class="send-btn" style="flex-shrink:0" onclick="sendDMClick()">
-                    <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                </button>
-            </div>
-        </div>
+    <div class="dm-messages" id="dmMessages">
+        <div class="dm-msg them">Hey! I posted about the AirPods I found. Is it yours?</div>
+        <div class="dm-msg me">Yes! The case has a tiny scratch on the back right?</div>
+        <div class="dm-msg them">Exactly that one! Come pick it up at the library desk anytime today.</div>
+        <div class="dm-msg me">On my way, thank you so much!</div>
+    </div>
+    <div class="dm-input-wrap">
+        <input class="dm-input" placeholder="Message…" id="dmInput" onkeydown="if(event.key==='Enter')sendDMClick()">
+        <button class="send-btn" onclick="sendDMClick()">
+            <svg width="13" height="13" fill="none" stroke="white" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
     </div>
 </div>
 
 <!-- ── LOCATION SHEET ── -->
 <div class="sheet-overlay" id="locOverlay" onclick="closeLocation()"></div>
-<div class="bottom-sheet loc-sheet" id="locSheet"><div class="sheet-drag-handle" onmousedown="startDrag(event,'locSheet')" ontouchstart="startDrag(event,'locSheet')"><div class="drag-pill"></div></div>
+<div class="bottom-sheet loc-sheet" id="locSheet">
     <div class="loc-header">
         <div>
             <div class="loc-title" id="locTitle"></div>
@@ -232,7 +293,7 @@
         <div class="form-row">
             <div class="form-group">
                 <label class="form-label">Location</label>
-                <select class="form-select" id="postLocation">
+                <select class="form-select">
                     <option>Main Library</option><option>Cafeteria</option>
                     <option>Engineering Building</option><option>Sports Complex</option>
                     <option>Dorms – Block A</option><option>Dorms – Block B</option>
@@ -241,7 +302,7 @@
             </div>
             <div class="form-group">
                 <label class="form-label">Category</label>
-                <select class="form-select" id="postCategory">
+                <select class="form-select">
                     <option>Electronics</option><option>Bags</option><option>Accessories</option>
                     <option>Clothing</option><option>ID / Cards</option><option>Keys</option><option>Other</option>
                 </select>
@@ -250,38 +311,26 @@
         <div class="form-row">
             <div class="form-group">
                 <label class="form-label">Status</label>
-                <select class="form-select" id="postStatus">
-                    <option value="found">Found</option><option value="lost">Lost</option><option value="waiting">Waiting</option><option value="recovered">Recovered</option>
+                <select class="form-select">
+                    <option>Found</option><option>Lost</option><option>Waiting</option>
                 </select>
             </div>
         </div>
         <div class="form-group" style="margin-bottom:11px">
             <label class="form-label">Title</label>
-            <input class="form-input" id="postTitle" type="text" placeholder="e.g. Black backpack with red keychain">
+            <input class="form-input" type="text" placeholder="e.g. Black backpack with red keychain">
         </div>
         <div class="form-group" style="margin-bottom:11px">
             <label class="form-label">Description</label>
-            <textarea class="form-textarea" id="postDesc" placeholder="Describe the item, exact location, time, identifying features…"></textarea>
+            <textarea class="form-textarea" placeholder="Describe the item, exact location, time, identifying features…"></textarea>
         </div>
-        <!-- Image upload: browse + paste + drag-drop -->
-        <div class="form-group" style="margin-bottom:11px">
-            <label class="form-label">Photo <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-            <div class="upload-area" id="uploadArea" onclick="document.getElementById('postImageInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleImageDrop(event)">
-                <input type="file" id="postImageInput" accept="image/*" style="display:none" onchange="handleImageFile(this.files[0])">
-                <div id="uploadPlaceholder">
-                    <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom:6px;opacity:0.4"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                    <div class="upload-text">Browse or paste a photo</div>
-                    <div class="upload-optional">Click to browse · Paste from clipboard · Drag &amp; drop</div>
-                </div>
-                <div id="uploadPreviewWrap" style="display:none;position:relative">
-                    <img id="uploadPreview" style="width:100%;border-radius:8px;display:block;height:auto">
-                    <button onclick="event.stopPropagation();clearImage()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:13px;line-height:1">✕</button>
-                </div>
-            </div>
+        <div class="upload-area">
+            <div class="upload-text">Tap to add a photo</div>
+            <div class="upload-optional">Optional</div>
         </div>
         <div class="modal-actions">
             <button class="btn-cancel" onclick="closePost()">Cancel</button>
-            <button class="btn-submit" id="postSubmitBtn" onclick="submitPost()">Post</button>
+            <button class="btn-submit" onclick="closePost();showToast('Post submitted!')">Post</button>
         </div>
     </div>
 </div>
@@ -305,21 +354,6 @@
                 <div class="status-opt" data-status="lost" onclick="selectStatus(this,'lost')">Lost</div>
                 <div class="status-opt" data-status="waiting" onclick="selectStatus(this,'waiting')">Waiting</div>
                 <div class="status-opt" data-status="recovered" onclick="selectStatus(this,'recovered')">Recovered</div>
-            </div>
-        </div>
-        <!-- Image upload in edit modal -->
-        <div class="form-group" style="margin-bottom:12px">
-            <label class="form-label">Photo <span style="color:var(--muted);font-weight:400">(optional)</span></label>
-            <div class="upload-area" id="editUploadArea" onclick="document.getElementById('editImageInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="event.preventDefault();this.classList.remove('drag-over');handleEditImageFile(event.dataTransfer.files[0])">
-                <input type="file" id="editImageInput" accept="image/*" style="display:none" onchange="handleEditImageFile(this.files[0])">
-                <div id="editUploadPlaceholder">
-                    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="margin-bottom:4px;opacity:0.4"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                    <div class="upload-text">Click to change photo</div>
-                </div>
-                <div id="editUploadPreviewWrap" style="display:none;position:relative">
-                    <img id="editImagePreview" style="width:100%;border-radius:8px;display:block;height:auto">
-                    <button onclick="event.stopPropagation();clearEditImage()" style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:13px;line-height:1">✕</button>
-                </div>
             </div>
         </div>
         <div class="modal-actions">
@@ -389,37 +423,24 @@
             <div class="login-logo-name">FindIt</div>
         </div>
 
-        <!-- Tab switcher -->
-        <div id="loginMainWrap">
-            <div style="display:flex;gap:0;margin-bottom:18px;background:var(--surface2);border-radius:10px;padding:3px">
-                <button id="tabLoginBtn" onclick="switchLoginTab('login')"
-                    style="flex:1;padding:7px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:var(--surface);color:var(--text);font-family:inherit">
-                    Log in
-                </button>
-                <button id="tabRegisterBtn" onclick="switchLoginTab('register')"
-                    style="flex:1;padding:7px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:transparent;color:var(--muted);font-family:inherit">
-                    Sign up
-                </button>
+        <!-- Normal login form -->
+        <div id="loginFormWrap">
+            <div class="login-title">Log in or sign up</div>
+            <div class="login-sub">Enter your campus email and we'll send you a sign-in link — no password needed.</div>
+            <input class="login-input" type="email" id="loginEmail" placeholder="your@university.edu" onkeydown="if(event.key==='Enter')sendMagicLink()">
+            <div class="login-admin-line">
+                Admin authority?
+                <a class="login-admin-link" onclick="contactAdmin()">Request access</a>
             </div>
+            <button class="btn-full btn-submit" onclick="sendMagicLink()">Send sign-in link</button>
+            <div class="login-note">We'll email you a one-time link to continue.</div>
+        </div>
 
-            <!-- Login tab -->
-            <div id="loginTab">
-                <input class="login-input" type="text" id="loginUid" placeholder="Username" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('loginPw').focus()">
-                <input class="login-input" type="password" id="loginPw" placeholder="Password" autocomplete="current-password" style="margin-top:8px" onkeydown="if(event.key==='Enter')doLogin()">
-                <div id="loginError" style="display:none;color:#e05a5a;font-size:12px;margin-top:6px;text-align:center"></div>
-                <button class="btn-full btn-submit" onclick="doLogin()" style="margin-top:12px" id="loginBtn">Log in</button>
-            </div>
-
-            <!-- Register tab -->
-            <div id="registerTab" style="display:none">
-                <input class="login-input" type="text" id="regName" placeholder="Display name (e.g. Khalid)" onkeydown="if(event.key==='Enter')document.getElementById('regUid').focus()">
-                <input class="login-input" type="text" id="regUid" placeholder="Username (letters, numbers, _)" autocomplete="username" style="margin-top:8px" onkeydown="if(event.key==='Enter')document.getElementById('regPw').focus()">
-                <input class="login-input" type="password" id="regPw" placeholder="Password (min 6 characters)" autocomplete="new-password" style="margin-top:8px" onkeydown="if(event.key==='Enter')doRegister()">
-                <div id="registerError" style="display:none;color:#e05a5a;font-size:12px;margin-top:6px;text-align:center"></div>
-                <button class="btn-full btn-submit" onclick="doRegister()" style="margin-top:12px" id="registerBtn">Create account</button>
-            </div>
-
-
+        <!-- Magic link sent -->
+        <div class="login-sent" id="loginSent">
+            <div class="login-sent-icon">📬</div>
+            <div class="login-sent-title">Check your inbox</div>
+            <div class="login-sent-msg" id="loginSentMsg"></div>
         </div>
 
         <!-- Admin request form -->
@@ -428,10 +449,10 @@
                 <button onclick="backToLogin()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0;line-height:1">←</button>
                 <div class="login-title" style="margin-bottom:0">Request Admin Access</div>
             </div>
-            <div class="login-sub">Fill in this form and a super admin will review your request.</div>
+            <div class="login-sub">Fill in this form and a super admin will review your request. You'll receive a reply by email.</div>
             <input class="login-input" type="text" id="arName" placeholder="Your full name">
-            <input class="login-input" type="text" id="arUid" placeholder="Your username (if you have one)" style="margin-top:7px">
-            <input class="login-input" type="text" id="arRole" placeholder="Your role (e.g. Library Staff)" style="margin-top:7px">
+            <input class="login-input" type="email" id="arEmail" placeholder="your@university.edu" style="margin-top:7px">
+            <input class="login-input" type="text" id="arRole" placeholder="Your role (e.g. Library Staff, Security)" style="margin-top:7px">
             <textarea class="login-input" id="arReason" placeholder="Why do you need admin access?" rows="3" style="margin-top:7px;resize:none;font-family:inherit"></textarea>
             <button class="btn-full btn-submit" style="margin-top:10px" onclick="submitAdminRequest()">Submit Request</button>
         </div>
@@ -440,87 +461,15 @@
         <div id="adminRequestSent" style="display:none;text-align:center;padding:6px 0">
             <div style="font-size:34px;margin-bottom:9px">✅</div>
             <div class="login-sent-title">Request Submitted</div>
-            <div class="login-sent-msg">Your request has been sent to the admin team.</div>
+            <div class="login-sent-msg">Your request has been sent to the admin team. We'll review it and get back to you by email.</div>
         </div>
 
         <span class="login-close" onclick="closeLogin()">Cancel</span>
     </div>
 </div>
 
-<script src="api.js"></script>
+<script src="supabase.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
-<!-- ── ADMIN REQUEST MODAL ── -->
-<div class="modal-bg" id="adminReqModal" onclick="if(event.target===this)closeAdminReqModal()">
-    <div class="modal-box" style="max-width:360px;padding:28px 24px">
-
-        <div style="margin-bottom:20px">
-            <div class="modal-title" style="margin-bottom:6px">Request Admin Access</div>
-            <div style="font-size:13px;color:var(--muted);line-height:1.5">Upload a photo of your staff ID. A super admin will review and approve your request.</div>
-        </div>
-
-        <div id="adminReqForm">
-            <!-- Staff ID upload -->
-            <div style="margin-bottom:24px">
-                <div style="font-size:12px;font-weight:600;color:var(--muted);letter-spacing:0.4px;text-transform:uppercase;margin-bottom:10px">Staff ID Photo</div>
-                <div id="arIdUploadArea" onclick="document.getElementById('arIdInput').click()"
-                    style="border:1.5px dashed var(--border);border-radius:14px;padding:28px 16px;text-align:center;cursor:pointer;transition:border-color 0.2s;background:var(--surface2)"
-                    ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
-                    ondragleave="this.style.borderColor='var(--border)'"
-                    ondrop="event.preventDefault();this.style.borderColor='var(--border)';handleArIdFile(event.dataTransfer.files[0])">
-                    <input type="file" id="arIdInput" accept="image/*" style="display:none" onchange="handleArIdFile(this.files[0])">
-                    <div id="arIdPlaceholder">
-                        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:0.35;margin-bottom:8px"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 3H8L6 7h12l-2-4z"/><circle cx="12" cy="13" r="3"/></svg>
-                        <div style="font-size:13px;color:var(--muted)">Tap to upload staff ID</div>
-                        <div style="font-size:11px;color:var(--muted);opacity:0.6;margin-top:4px">JPG, PNG — clearly shows your name & role</div>
-                    </div>
-                    <div id="arIdPreviewWrap" style="display:none;position:relative">
-                        <img id="arIdPreview" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:contain">
-                        <button onclick="event.stopPropagation();clearArId()" style="position:absolute;top:-8px;right:-8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:50%;width:24px;height:24px;cursor:pointer;font-size:12px;line-height:1">✕</button>
-                    </div>
-                </div>
-            </div>
-
-            <div style="margin-bottom:28px">
-                <div style="font-size:12px;font-weight:600;color:var(--muted);letter-spacing:0.4px;text-transform:uppercase;margin-bottom:10px">Your Username</div>
-                <input class="form-input" type="text" id="arUid" placeholder="Username on FindIt (optional)" style="width:100%;box-sizing:border-box">
-            </div>
-
-            <div class="modal-actions" style="margin-top:0">
-                <button class="btn-cancel" onclick="closeAdminReqModal()">Cancel</button>
-                <button class="btn-submit" id="adminReqBtn" onclick="submitAdminRequest()">Submit</button>
-            </div>
-        </div>
-
-        <!-- Success state -->
-        <div id="adminReqSent" style="display:none;text-align:center;padding:16px 0 8px">
-            <div style="font-size:40px;margin-bottom:12px">✅</div>
-            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;margin-bottom:8px">Request Submitted</div>
-            <div style="font-size:13px;color:var(--muted);line-height:1.6">Your staff ID has been sent to the admin team. They'll review it and update your access.</div>
-            <button class="btn-full btn-submit" onclick="closeAdminReqModal()" style="margin-top:20px">Done</button>
-        </div>
-
-    </div>
-</div>
-
-<!-- ── REPORT MODAL ── -->
-<div class="modal-bg" id="reportModal" onclick="if(event.target===this)closeReport()">
-    <div class="modal-box" style="max-width:340px">
-        <div class="modal-title">Report Post</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Tell us what's wrong with this post. Admins will review it.</div>
-        <select class="form-input" id="reportReason" style="width:100%;margin-bottom:0">
-            <option value="">Select a reason…</option>
-            <option value="spam">Spam or misleading</option>
-            <option value="inappropriate">Inappropriate content</option>
-            <option value="fake">Fake or fraudulent</option>
-            <option value="other">Other</option>
-        </select>
-        <div class="modal-actions" style="margin-top:16px">
-            <button class="btn-cancel" onclick="closeReport()">Cancel</button>
-            <button class="btn-submit" id="reportBtn" onclick="submitReport()">Report</button>
-        </div>
-    </div>
-</div>
-
 </body>
 </html>
