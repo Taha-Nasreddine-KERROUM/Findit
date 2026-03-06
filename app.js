@@ -1233,6 +1233,8 @@ async function submitPost() {
     const status   = document.getElementById('postStatus').value;
     if (!title) { document.getElementById('postTitle').focus(); showToast('Please enter a title'); return; }
 
+    const btn = document.getElementById('postSubmitBtn');
+
     try {
         const now     = new Date();
         const dateStr = now.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
@@ -1251,21 +1253,54 @@ async function submitPost() {
             _imageUrl: postImageDataUrl || null,
         };
         if (!Array.isArray(window.POSTS)) window.POSTS = [];
-        POSTS.unshift(newPost);
-        closePost();
-        renderFeed();
-        showToast('Post published!');
 
         if (USE_SUPABASE) {
-            // Upload image to Supabase Storage first so it has a real public URL
-            let imageUrl = null;
+            let imageUrl     = null;  // full URL for display
+            let imageUrlPath = null;  // server-relative path for API
+
             if (postImageDataUrl) {
-                imageUrl = await sb.uploadImage(postImageDataUrl, 'posts');
-                // Update local post with real URL right away
-                const tempPost = POSTS.find(p => p.id === tempId);
-                if (tempPost && imageUrl) { tempPost._imageUrl = imageUrl; renderFeed(); }
+                // ── FEATURE 3: moderated upload with NSFW check ──────────────
+                btn.textContent = 'Checking image…'; btn.disabled = true;
+                let uploadRes;
+                try {
+                    uploadRes = await sb.uploadImageChecked(postImageDataUrl);
+                } catch(e) {
+                    btn.textContent = 'Post'; btn.disabled = false;
+                    showToast(e.message || 'Image upload failed');
+                    return;
+                }
+                imageUrlPath = uploadRes.url;                  // e.g. /images/abc.jpg
+                imageUrl     = sb.API_BASE + uploadRes.url;   // full URL for display
+                btn.textContent = 'Posting…';
+            } else {
+                btn.textContent = 'Posting…'; btn.disabled = true;
             }
-            const saved = await sb.createPost({ author_id: App.currentUser.id, title, description: desc, location, category, status, image_url: imageUrl });
+
+            // optimistic UI
+            newPost._imageUrl = imageUrl;
+            POSTS.unshift(newPost);
+            closePost();
+            btn.textContent = 'Post'; btn.disabled = false;
+            renderFeed();
+            showToast('Post published!');
+
+            // ── FEATURE 2: use /posts/ai when image present (stores embedding + auto-match)
+            //              use /posts   when no image (no embedding needed)
+            let saved;
+            if (imageUrlPath) {
+                saved = await sb.createPostAI({
+                    author_id: App.currentUser.id,
+                    title, description: desc, location, category, status,
+                    image_url: imageUrlPath,
+                });
+            } else {
+                saved = await sb.createPost({
+                    author_id: App.currentUser.id,
+                    title, description: desc, location, category, status,
+                    image_url: null,
+                });
+            }
+
             if (saved && saved[0]) {
                 const realPost = mapRow({ ...saved[0],
                     author_uid:      App.currentUser.uid,
@@ -1273,6 +1308,7 @@ async function submitPost() {
                     author_initials: App.currentUser.initials,
                     author_color:    App.currentUser.color,
                 });
+                realPost._imageUrl = imageUrl;
                 const idx = POSTS.findIndex(p => p.id === tempId);
                 if (idx > -1) POSTS[idx] = realPost;
                 renderFeed();
@@ -1280,6 +1316,7 @@ async function submitPost() {
         }
     } catch(err) {
         console.error('submitPost error:', err);
+        btn.textContent = 'Post'; btn.disabled = false;
         showToast('Something went wrong — check console (F12)');
     }
 }
@@ -1751,87 +1788,4 @@ setUser = function(me) {
     _origSetUser(me);
     const uid = (me.profile || me).uid;
     if (uid) connectUserSSE(uid);
-};
-
-
-// ══════════════════════════════════════════════════════════════════════════════
-// ── FEATURE 3: patch submitPost to use moderated upload + /posts/ai ───────────
-// ══════════════════════════════════════════════════════════════════════════════
-// We store the original submitPost and replace it with one that:
-//   1. Uses sb.uploadImageChecked() → shows user-friendly rejection if NSFW
-//   2. Uses sb.createPostAI() when image is present → triggers auto-match
-const _origSubmitPost = submitPost;
-// eslint-disable-next-line no-global-assign
-submitPost = async function() {
-    if (!App.isLoggedIn) return;
-    const title    = document.getElementById('postTitle').value.trim();
-    const desc     = document.getElementById('postDesc').value.trim();
-    const location = document.getElementById('postLocation').value;
-    const category = document.getElementById('postCategory').value;
-    const status   = document.getElementById('postStatus').value;
-    if (!title) { document.getElementById('postTitle').focus(); showToast('Please enter a title'); return; }
-
-    // If no image → use original flow (no NSFW check needed, no embedding)
-    if (!postImageDataUrl) {
-        return _origSubmitPost();
-    }
-
-    // ── image present: use moderated upload + AI post creation ───────────────
-    const btn = document.getElementById('postSubmitBtn');
-    btn.textContent = 'Uploading…'; btn.disabled = true;
-
-    let imageUrl = null;
-    try {
-        const res = await sb.uploadImageChecked(postImageDataUrl);
-        imageUrl = sb.API_BASE + res.url;
-    } catch(e) {
-        btn.textContent = 'Post'; btn.disabled = false;
-        showToast(e.message || 'Image upload failed');
-        return;
-    }
-
-    // optimistic UI
-    const tempId  = 'temp-' + Date.now();
-    const dateStr = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-    const newPost = {
-        id: tempId,
-        owner: App.currentUser.uid,
-        ownerName: App.currentUser.name,
-        ownerInitials: App.currentUser.initials,
-        ownerColor: App.currentUser.color,
-        ownerId: App.currentUser.id,
-        title, desc, location, category, status,
-        date: dateStr, comments: 0,
-        hasImage: true, _imageUrl: imageUrl,
-    };
-    if (!Array.isArray(window.POSTS)) window.POSTS = [];
-    POSTS.unshift(newPost);
-    closePost();
-    renderFeed();
-    showToast('Post published!');
-    btn.textContent = 'Post'; btn.disabled = false;
-
-    // save to server with AI route (triggers embedding + auto-match)
-    try {
-        const saved = await sb.createPostAI({
-            author_id: App.currentUser.id,
-            title, description: desc, location, category, status,
-            image_url: res.url,   // server-relative URL
-        });
-        if (saved && saved[0]) {
-            const realPost = mapRow({
-                ...saved[0],
-                author_uid:      App.currentUser.uid,
-                author_name:     App.currentUser.name,
-                author_initials: App.currentUser.initials,
-                author_color:    App.currentUser.color,
-            });
-            realPost._imageUrl = imageUrl;
-            const idx = POSTS.findIndex(p => p.id === tempId);
-            if (idx > -1) POSTS[idx] = realPost;
-            renderFeed();
-        }
-    } catch(e) {
-        console.error('createPostAI error:', e);
-    }
 };
