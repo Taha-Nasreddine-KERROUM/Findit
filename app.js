@@ -299,6 +299,7 @@ function buildCard(post) {
           <div class="card-status-row">
             <span class="card-category">${post.category}</span>
             <span class="card-date">${post.date}</span>
+            ${post._similarity != null ? `<span class="sim-badge">${Math.round(post._similarity*100)}% match</span>` : ''}
             <span class="status-badge ${statusClass(post.status)}">${statusLabel(post.status)}</span>
           </div>
         </div>
@@ -323,9 +324,25 @@ function buildCard(post) {
   </div>`;
 }
 
+// Image-search mode state
+let _imgSearchResults = null;  // null = normal mode, array = image search results
+
 function renderFeed() {
     const feed  = document.getElementById('feed');
     const empty = document.getElementById('emptyState');
+
+    // ── IMAGE SEARCH MODE ────────────────────────────────────────────────────
+    if (_imgSearchResults !== null) {
+        if (!_imgSearchResults.length) {
+            feed.innerHTML = ''; empty.classList.add('visible');
+        } else {
+            empty.classList.remove('visible');
+            feed.innerHTML = _imgSearchResults.map(buildCard).join('');
+        }
+        return;
+    }
+
+    // ── NORMAL MODE ──────────────────────────────────────────────────────────
     const q = App.searchQuery.toLowerCase().trim();
     const f = App.activeFilter;
     const filtered = POSTS.filter(p => {
@@ -341,6 +358,23 @@ function renderFeed() {
     });
     if (!filtered.length) { feed.innerHTML=''; empty.classList.add('visible'); }
     else { empty.classList.remove('visible'); feed.innerHTML=filtered.map(buildCard).join(''); }
+}
+
+function setImageSearchMode(results) {
+    // results = array of post objects with ._similarity set, or null to exit
+    _imgSearchResults = results;
+
+    const chip = document.getElementById('chipImageSearch');
+    if (results !== null) {
+        // show the locked "Image Search" chip as active
+        if (chip) { chip.style.display = ''; chip.classList.add('active'); }
+    } else {
+        // hide it and restore normal state
+        if (chip) { chip.style.display = 'none'; chip.classList.remove('active'); }
+        // reset all _similarity on POSTS
+        POSTS.forEach(p => { p._similarity = null; });
+    }
+    renderFeed();
 }
 
 // ── SEARCH ────────────────────────────────────────────────────────────────────
@@ -1689,28 +1723,20 @@ function selectImgFilter(el) {
 async function runImgSearch() {
     if (!_imgFile) return;
     const btn = document.getElementById('imgSearchRunBtn');
-    const out = document.getElementById('imgSearchResults');
     btn.disabled = true; btn.textContent = 'Searching…';
-    out.innerHTML = '<div style="text-align:center;padding:18px;color:var(--muted);font-size:13px">Analysing image…</div>';
     try {
-        const results = await sb.searchByImage(_imgFile, _imgFilter);
-        if (!results.length) {
-            out.innerHTML = '<div style="text-align:center;padding:18px;color:var(--muted);font-size:13px">No similar items found</div>';
-        } else {
-            out.innerHTML = results.map(p => `
-                <div class="img-result" onclick="closeImgSearch();openComments('${p.id}')">
-                    ${p.image_url
-                        ? `<img class="img-result-thumb" src="${sb.API_BASE}${p.image_url}" loading="lazy">`
-                        : `<div class="img-result-thumb" style="display:flex;align-items:center;justify-content:center;font-size:22px">📦</div>`}
-                    <div class="img-result-info">
-                        <div class="img-result-title">${escHtml(p.title)}</div>
-                        <div class="img-result-meta">${statusLabel(p.status||'found')} · ${escHtml(p.location||'')}</div>
-                    </div>
-                    <div class="img-result-pct">${Math.round((p.similarity||0)*100)}%</div>
-                </div>`).join('');
-        }
+        const raw = await sb.searchByImage(_imgFile, _imgFilter);
+        // Map server results into card-compatible objects with _similarity
+        const cards = raw.map(p => ({
+            ...mapRow(p),
+            _similarity: p.similarity || 0,
+            _imageUrl:   p.image_url ? sb.API_BASE + p.image_url : null,
+        }));
+        closeImgSearch();
+        setImageSearchMode(cards);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch(e) {
-        out.innerHTML = `<div style="text-align:center;padding:18px;color:var(--danger);font-size:13px">Error: ${escHtml(e.message)}</div>`;
+        showToast('Image search failed: ' + e.message);
     } finally {
         btn.disabled = false; btn.textContent = 'Search';
     }
@@ -1742,7 +1768,7 @@ function closeMatchPanel() {
 function renderMatchPanel() {
     const list = document.getElementById('matchPanelList');
     list.innerHTML = _matches.map(m => `
-        <div class="match-item" onclick="closeMatchPanel();openComments('${m.id}')">
+        <div class="match-item" onclick="closeMatchPanel();scrollToPost('${m.id}')">
             ${m.image_url
                 ? `<img class="match-thumb" src="${sb.API_BASE}${m.image_url}" loading="lazy">`
                 : `<div class="match-thumb-empty">📦</div>`}
