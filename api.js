@@ -223,7 +223,8 @@ const sb = (() => {
             throw new Error(err.detail || 'Image rejected: inappropriate content');
         }
         if (!r.ok) throw new Error('Upload failed');
-        return await r.json();   // { url }
+        const data = await r.json();
+        return { url: data.url, fullUrl: `${API_URL}${data.url}` };  // url = path, fullUrl = absolute
     }
 
     /**
