@@ -661,3 +661,22 @@ button { cursor: pointer; font-family: inherit; }
 .img-result-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .img-result-meta  { font-size: 11px; color: var(--muted); margin-top: 3px; }
 .img-result-pct   { font-size: 12px; font-weight: 700; color: var(--accent); flex-shrink: 0; }
+
+/* similarity badge on cards */
+.sim-badge {
+    background: rgba(91,141,255,.15);
+    color: var(--accent);
+    border: 1px solid rgba(91,141,255,.3);
+    border-radius: 99px;
+    font-size: 10px; font-weight: 700;
+    padding: 2px 7px; flex-shrink: 0;
+}
+
+/* locked image-search chip */
+.chip-img-search {
+    background: rgba(91,141,255,.18) !important;
+    color: var(--accent) !important;
+    border: 1px solid rgba(91,141,255,.35) !important;
+    cursor: pointer;
+}
+.chip-img-search:hover { background: rgba(91,141,255,.28) !important; }
