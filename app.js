@@ -1,14 +1,19 @@
-const USE_SUPABASE = true;
+// ============================================================
+//  FindIt – Main App
+//  Works in two modes:
+//   • DEMO MODE  (USE_SUPABASE = false) — all data is local, no backend needed
+//   • LIVE MODE  (USE_SUPABASE = true)  — reads/writes from Supabase
+// ============================================================
+const USE_SUPABASE = true; // flip to true once you've set up Supabase
 
 // ── APP STATE ─────────────────────────────────────────────────────────────────
 const App = {
-    isLoggedIn:    false,
-    isAdmin:       false,
-    isSuperAdmin:  false,
-    currentUser:   null,
-    activeFilter:  'all',
-    searchQuery:   '',
-    openPostId:    null,  // which post's comments panel is open
+    isLoggedIn: false,
+    isAdmin: false,
+    isSuperAdmin: false,
+    currentUser: null,   // { id, uid, name, initials, color, role }
+    activeFilter: 'all',
+    searchQuery: '',
 };
 
 // ── BOOT ──────────────────────────────────────────────────────────────────────
@@ -18,226 +23,31 @@ const App = {
         if (me) setUser(me);
         else {
             const restored = await sb.restoreSession();
-            if (restored?._banned) {
-                showToast('Your account has been banned.');
-                sb.signOut();
-            } else if (restored) {
-                setUser(restored);
-            }
+            if (restored) setUser(restored);
         }
-        const rows = await sb.getPosts();
-        POSTS = (rows || []).filter(r => !r.is_deleted).map(mapRow);
+    } else {
+        // Demo: simulate being logged in as amir_b who owns post 1
+        App.isLoggedIn = true;
+        App.currentUser = { id:'demo-amir', uid:'amir_b', name:'Amir', initials:'AB', color:'#4da6ff', role:'user' };
     }
     updateMenuState();
     initSearch();
     initFilters();
     renderFeed();
-    startPolling();
 })();
 
-// ── LIVE POLLING ───────────────────────────────────────────────────────────────
-let _pendingNewPosts = [];      // new posts waiting for banner click
-let _dmUnreadCount   = 0;
-let _postSSE         = null;    // EventSource for new posts
-let _dmSSE           = null;    // EventSource for DM notifications
-
-// ── SSE CONNECTIONS ────────────────────────────────────────────────────────────
-function startPolling() {
-    connectPostSSE();
-    pollDMBadge();  // initial badge check
-}
-
-let _commentSSE = null;
-
-function connectPostSSE() {
-    if (_postSSE) { _postSSE.close(); }
-    const url = sb.API_BASE + '/stream?channel=all';
-    _postSSE = new EventSource(url);
-    _postSSE.onmessage = (e) => {
-        try {
-            const data = JSON.parse(e.data);
-            if (data.type === 'new_post')    onNewPostSSE(data.post);
-            if (data.type === 'new_comment') onNewCommentSSE(data.comment);
-        } catch {}
-    };
-    _postSSE.onerror = () => {
-        _postSSE.close();
-        setTimeout(connectPostSSE, 3000);
-    };
-}
-
-function connectCommentSSE(postId) {
-    if (_commentSSE) { _commentSSE.close(); _commentSSE = null; }
-    const url = sb.API_BASE + `/stream?channel=post:${encodeURIComponent(postId)}`;
-    _commentSSE = new EventSource(url);
-    _commentSSE.onmessage = (e) => {
-        try {
-            const data = JSON.parse(e.data);
-            if (data.type === 'new_comment') onNewCommentSSE(data.comment);
-        } catch {}
-    };
-    _commentSSE.onerror = () => {
-        if (_commentSSE) { _commentSSE.close(); _commentSSE = null; }
-        // Reconnect after 3s as long as this post is still open
-        if (App.openPostId === postId) setTimeout(() => connectCommentSSE(postId), 3000);
-    };
-}
-
-function connectDMSSE(myUid) {
-    if (_dmSSE) { _dmSSE.close(); }
-    const url = sb.API_BASE + `/stream?channel=dm:${encodeURIComponent(myUid)}`;
-    _dmSSE = new EventSource(url);
-    _dmSSE.onmessage = (e) => {
-        try {
-            const data = JSON.parse(e.data);
-            if (data.type === 'new_dm') onNewDMSSE(data);
-        } catch {}
-    };
-    _dmSSE.onerror = () => {
-        _dmSSE.close();
-        setTimeout(() => connectDMSSE(myUid), 3000);
-    };
-}
-
-function onNewPostSSE(rawPost) {
-    const knownIds = new Set(POSTS.map(p => p.id));
-    if (knownIds.has(rawPost.id)) return;  // already have it (we just posted it)
-    // Don't show banner to the person who just posted
-    if (App.isLoggedIn && rawPost.author_uid === App.currentUser?.uid) return;
-    const card = mapRow(rawPost);
-    _pendingNewPosts.unshift(card);
-    showNewPostsBanner(_pendingNewPosts.length);
-}
-
-function onNewCommentSSE(comment) {
-    if (App.openPostId !== comment.post_id) return;
-    // Skip if we just sent this ourselves
-    if (App.isLoggedIn && comment.author?.uid === App.currentUser?.uid) return;
-    // Re-fetch full comment list (for accurate vote state and full nesting)
-    sb.getComments(comment.post_id).then(comments => {
-        if (!Array.isArray(comments)) return;
-        if (App.openPostId === comment.post_id) renderComments(comments);
-    });
-}
-
-function onNewDMSSE(data) {
-    const dmSheet = document.getElementById('dmSheet');
-    const threadVisible = document.getElementById('dmThread')?.style.display !== 'none';
-
-    if (dmSheet?.classList.contains('open') && threadVisible && _dmOtherUid === data.from_uid) {
-        // Thread with this person is open — append message live
-        appendDMMessage(data.msg, false);
-    } else {
-        // Sheet closed or different thread — bump badge
-        _dmUnreadCount++;
-        updateDMBadge(_dmUnreadCount);
-    }
-}
-
-function appendDMMessage(msg, isMe) {
-    const msgs = document.getElementById('dmMessages');
-    if (!msgs) return;
-    const atBottom = msgs.scrollHeight - msgs.clientHeight - msgs.scrollTop < 60;
-    const div = document.createElement('div');
-    div.className = `dm-msg ${isMe ? 'me' : 'them'}`;
-    const imgHtml = msg.image_url
-        ? `<img src="${msg.image_url}" style="max-width:180px;max-height:160px;border-radius:8px;display:block;margin-top:${msg.body?'6px':'0'};object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'180px':'100%'">`
-        : '';
-    div.innerHTML = (msg.body ? escHtml(msg.body) : '') + imgHtml +
-        ``;
-    // Remove "no messages" placeholder if present
-    const placeholder = msgs.querySelector('div[style*="text-align:center"]');
-    if (placeholder) placeholder.remove();
-    msgs.appendChild(div);
-    if (atBottom) msgs.scrollTop = msgs.scrollHeight;
-}
-
-function showNewPostsBanner(count) {
-    const banner = document.getElementById('newPostsBanner');
-    const label  = document.getElementById('newPostsLabel');
-    if (!banner) return;
-    label.textContent = `↑ ${count} new post${count === 1 ? '' : 's'}`;
-    banner.style.display = '';
-    requestAnimationFrame(() => banner.classList.add('visible'));
-}
-
-function dismissNewPosts() {
-    if (_pendingNewPosts.length) {
-        const knownIds = new Set(POSTS.map(p => p.id));
-        const fresh = _pendingNewPosts.filter(p => !knownIds.has(p.id));
-        POSTS = [...fresh, ...POSTS];
-        renderFeed();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        _pendingNewPosts = [];
-    }
-    const banner = document.getElementById('newPostsBanner');
-    if (banner) {
-        banner.classList.remove('visible');
-        setTimeout(() => { banner.style.display = 'none'; }, 260);
-    }
-}
-
-async function pollDMBadge() {
-    if (!App.isLoggedIn) { updateDMBadge(0); return; }
-    const dmSheet = document.getElementById('dmSheet');
-    if (dmSheet?.classList.contains('open')) { updateDMBadge(0); return; }
-    const res = await sb.getUnreadCount();
-    _dmUnreadCount = res?.count || 0;
-    updateDMBadge(_dmUnreadCount);
-}
-
-function updateDMBadge(count) {
-    const badge = document.getElementById('dmFabBadge');
-    if (!badge) return;
-    if (count > 0) {
-        badge.textContent = count > 99 ? '99+' : count;
-        badge.style.display = 'flex';
-    } else {
-        badge.style.display = 'none';
-    }
-}
-
-// ── MAP SUPABASE ROW → CARD OBJECT ────────────────────────────────────────────
-function mapRow(r) {
-    const d = new Date(r.created_at);
-    const dateStr = d.toLocaleDateString('en-GB', {day:'numeric', month:'short'});
-    return {
-        id:            r.id,
-        owner:         r.author_uid      || r.uid || '',
-        ownerName:     r.author_name     || r.name || '',
-        ownerInitials: r.author_initials || r.initials || '?',
-        ownerColor:    r.author_color    || r.color || '#5b8dff',
-        ownerId:       r.author_id       || '',
-        ownerRole:     r.author_role     || '',
-        title:         r.title       || '',
-        desc:          r.description || '',
-        location:      r.location    || '',
-        category:      r.category    || '',
-        status:        r.status      || 'found',
-        date:          dateStr,
-        comments:      Number(r.comment_count) || 0,
-        hasImage:      !!r.image_url,
-        _imageUrl:     r.image_url || null,
-        _raw_ts:       r.created_at || '',
-    };
-}
-
 function setUser(me) {
-    // Accept both {profile:{...}} and flat profile object
-    const p = me.profile || me;
-    App.isLoggedIn   = true;
-    App.currentUser  = {
-        id:       p.id,
-        uid:      p.uid,
-        name:     p.name,
-        initials: p.initials,
-        color:    p.color,
-        role:     p.role,
+    App.isLoggedIn = true;
+    App.currentUser = {
+        id:       me.profile.id,
+        uid:      me.profile.uid,
+        name:     me.profile.name,
+        initials: me.profile.initials,
+        color:    me.profile.color,
+        role:     me.profile.role,
     };
-    App.isAdmin      = ['admin','super_admin'].includes(p.role);
-    App.isSuperAdmin = p.role === 'super_admin';
-    // Connect DM SSE for this user
-    connectDMSSE(p.uid);
+    App.isAdmin      = ['admin','super_admin'].includes(me.profile.role);
+    App.isSuperAdmin = me.profile.role === 'super_admin';
 }
 
 // ── RENDER ENGINE ─────────────────────────────────────────────────────────────
@@ -250,37 +60,23 @@ function statusLabel(s) {
 
 function buildCard(post) {
     const isOwner = App.isLoggedIn && (post.owner === App.currentUser?.uid || App.isAdmin);
-    const canReport = App.isLoggedIn && !App.isAdmin && post.owner !== App.currentUser?.uid;
-    let imgHtml = '';
-    if (post._imageUrl) {
-        imgHtml = `<div class="card-image"><img src="${post._imageUrl}" style="width:100%;display:block;height:auto;border-radius:0"></div>`;
-    }
+    const imgHtml = post.hasImage
+        ? `<div class="card-image"><div class="img-placeholder ${post.imgClass}">${post.imgEmoji}</div></div>` : '';
 
-    // owner/admin menu
-    const ownerMenuItems = App.isSuperAdmin
-        ? `<div class="card-menu-item" onclick="openEdit('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit post</div><div class="card-menu-sep"></div><div class="card-menu-item danger" onclick="openConfirm('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>Delete post</div>`
-        : post.owner === App.currentUser?.uid
-            ? `<div class="card-menu-item" onclick="openEdit('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit post</div><div class="card-menu-sep"></div><div class="card-menu-item danger" onclick="openConfirm('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>Delete post</div>`
-            : `<div class="card-menu-item danger" onclick="openConfirm('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>Delete post</div>`;
-    // member report menu
-    const reportMenuItem = canReport
-        ? `<div class="card-menu-item danger" onclick="openReport('${post.id}');closeCardMenu('${post.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>Report post</div>`
-        : '';
-    const dotsMenu = (isOwner || canReport) ? `
+    const dotsMenu = isOwner ? `
     <div class="card-menu" id="menu-${post.id}">
-      ${isOwner ? ownerMenuItems : ''}
-      ${isOwner && canReport ? '<div class="card-menu-sep"></div>' : ''}
-      ${reportMenuItem}
+      <div class="card-menu-item" onclick="openEdit(${post.id});closeCardMenu(${post.id})">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit post
+      </div>
+      <div class="card-menu-sep"></div>
+      <div class="card-menu-item danger" onclick="openConfirm(${post.id});closeCardMenu(${post.id})">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>
+        Delete post
+      </div>
     </div>` : '';
-    const dotsBtn = (isOwner || canReport)
-        ? `<button class="dots-btn" onclick="toggleCardMenu(event,'${post.id}')" title="More options">•••</button>` : '';
-
-    // Escape for safe use in onclick strings
-    const safeOwnerName     = post.ownerName.replace(/'/g, "\\'");
-    const safeOwnerInitials = post.ownerInitials.replace(/'/g, "\\'");
-    const safeOwnerColor    = post.ownerColor.replace(/'/g, "\\'");
-    const safeOwner         = post.owner.replace(/'/g, "\\'");
-    const safeLocation      = post.location.replace(/'/g, "\\'");
+    const dotsBtn = isOwner
+        ? `<button class="dots-btn" onclick="toggleCardMenu(event,${post.id})" title="More options">•••</button>` : '';
 
     return `
   <div class="card" data-post="${post.id}" data-owner="${post.owner}"
@@ -290,16 +86,16 @@ function buildCard(post) {
     <div class="card-inner">
       <div class="card-header">
         <div class="card-avatar" style="background:${post.ownerColor}"
-             onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">${post.ownerInitials}</div>
+             onclick="openProfile('${post.ownerName}','${post.ownerInitials}','${post.ownerColor}','${post.owner}')">${post.ownerInitials}</div>
         <div class="card-meta">
-          <span class="location-tag" onclick="openLocation('${safeLocation}')">${post.location}</span>
-          <span class="username" onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">u/${post.owner}${post.ownerRole==='super_admin'?'<span class="badge-verified gold" title="Super Admin">✓</span>':post.ownerRole==='admin'?'<span class="badge-verified purple" title="Admin">✓</span>':''}</span>
+          <span class="location-tag" onclick="openLocation('${post.location}')">${post.location}</span>
+          <span class="username" onclick="openProfile('${post.ownerName}','${post.ownerInitials}','${post.ownerColor}','${post.owner}')">u/${post.owner}</span>
         </div>
         <div class="card-right">
           <div class="card-status-row">
             <span class="card-category">${post.category}</span>
             <span class="card-date">${post.date}</span>
-            <span class="status-badge ${statusClass(post.status)}">${statusLabel(post.status)}</span>
+            <span class="status-badge ${statusClass(post.status)}" id="status-card-${post.id}">${statusLabel(post.status)}</span>
           </div>
         </div>
       </div>
@@ -307,9 +103,9 @@ function buildCard(post) {
       <div class="card-desc">${post.desc}</div>
       ${imgHtml}
       <div class="card-actions">
-        <button class="action-btn" onclick="openComments('${post.id}')">
+        <button class="action-btn" onclick="openComments('${post.title.substring(0,30)}…')">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span id="comment-count-${post.id}">${post.comments}</span> comment${post.comments!==1?'s':''}
+          ${post.comments} comment${post.comments!==1?'s':''}
         </button>
         <div class="spacer"></div>
         ${dotsBtn}
@@ -329,13 +125,7 @@ function renderFeed() {
     const q = App.searchQuery.toLowerCase().trim();
     const f = App.activeFilter;
     const filtered = POSTS.filter(p => {
-        let statusMatch;
-        if (f === 'all' || !f || (Array.isArray(f) && f.length === 0)) {
-            statusMatch = true;
-        } else {
-            const filters = Array.isArray(f) ? f : [f];
-            statusMatch = filters.some(fv => p.status === fv || p.location.toLowerCase().includes(fv));
-        }
+        const statusMatch = f==='all' || p.status===f || p.location.toLowerCase().includes(f);
         const searchMatch = !q || [p.title,p.desc,p.location,p.category,p.owner].some(s=>s.toLowerCase().includes(q));
         return statusMatch && searchMatch;
     });
@@ -360,45 +150,12 @@ function initSearch() {
 }
 
 // ── FILTERS ───────────────────────────────────────────────────────────────────
-let activeFilters = new Set();
-
 function initFilters() {
-    const allChip    = document.getElementById('chipAll');
-    const expandWrap = document.getElementById('filterExpand');
-    expandWrap.classList.remove('open');
-
     document.querySelectorAll('.filter-chip').forEach(chip => {
         chip.addEventListener('click', () => {
-            const f = chip.dataset.filter;
-            if (f === 'all') {
-                if (allChip.classList.contains('active')) {
-                    // Deselect All → expand others, show everything still
-                    allChip.classList.remove('active');
-                    expandWrap.classList.add('open');
-                    activeFilters.clear();
-                } else {
-                    // Re-select All → collapse others, clear filters
-                    activeFilters.clear();
-                    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-                    allChip.classList.add('active');
-                    expandWrap.classList.remove('open');
-                }
-            } else {
-                expandWrap.classList.add('open');
-                allChip.classList.remove('active');
-                if (activeFilters.has(f)) {
-                    activeFilters.delete(f);
-                    chip.classList.remove('active');
-                } else {
-                    activeFilters.add(f);
-                    chip.classList.add('active');
-                }
-                // If nothing selected, mark All as active but keep bar open
-                if (activeFilters.size === 0) {
-                    allChip.classList.add('active');
-                }
-            }
-            App.activeFilter = activeFilters.size > 0 ? [...activeFilters] : 'all';
+            document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
+            chip.classList.add('active');
+            App.activeFilter = chip.dataset.filter;
             renderFeed();
         });
     });
@@ -419,10 +176,7 @@ function closeCardMenu(postId) {
     document.getElementById('menu-'+postId)?.classList.remove('open');
     if (openMenuId===postId) openMenuId=null;
 }
-document.addEventListener('click', () => {
-    if (openMenuId) closeCardMenu(openMenuId);
-    if (_openCMenuId) closeCMenu(_openCMenuId);
-});
+document.addEventListener('click', () => { if (openMenuId) closeCardMenu(openMenuId); });
 
 // ── MENU ──────────────────────────────────────────────────────────────────────
 function toggleMenu() { document.getElementById('menuDropdown').classList.toggle('open'); }
@@ -440,7 +194,7 @@ async function signOut() {
 function openOwnProfile() {
     toggleMenu();
     const u = App.currentUser;
-    if (u) openProfile(u.name, u.initials, u.color, u.uid, u.id);
+    if (u) openProfile(u.name, u.initials, u.color, u.uid);
 }
 
 function updateMenuState() {
@@ -451,862 +205,145 @@ function updateMenuState() {
         document.getElementById('menuAvatarSm').textContent      = App.currentUser.initials;
         document.getElementById('menuUserName').textContent      = App.currentUser.name;
         document.getElementById('menuUserHandle').textContent    = 'u/'+App.currentUser.uid;
-        const adminSection = document.getElementById('adminMenuSection');
-    if (adminSection) adminSection.style.display = App.isAdmin ? '' : 'none';
-    const reqAdminItem = document.getElementById('reqAdminMenuItem');
-    if (reqAdminItem) reqAdminItem.style.display = App.isAdmin ? 'none' : '';
+        document.getElementById('adminMenuItem').style.display   = App.isAdmin ? '' : 'none';
     }
 }
 
 // ── COMMENTS ──────────────────────────────────────────────────────────────────
-async function openComments(postId) {
-    App.openPostId = postId;
-    const post = POSTS.find(p => p.id === postId);
-    document.getElementById('panelTitle').textContent = post ? post.title : 'Comments';
-    document.getElementById('commentsScroll').innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading…</div>';
+function openComments(title) {
+    document.getElementById('panelTitle').textContent = title;
     document.getElementById('commentsPanel').classList.add('open');
     document.getElementById('overlay').classList.add('show');
     document.body.style.overflow='hidden';
-
-    // Update comment input visibility based on login state
-    const inputWrap = document.getElementById('commentInputWrap');
-    const loginPrompt = document.getElementById('commentLoginPrompt');
-    if (App.isLoggedIn) {
-        inputWrap.style.display='';
-        loginPrompt.style.display='none';
-    } else {
-        inputWrap.style.display='none';
-        loginPrompt.style.display='';
-    }
-
-    if (USE_SUPABASE) {
-        const comments = await sb.getComments(postId);
-        renderComments(comments || []);
-        connectCommentSSE(postId);
-    } else {
-        renderComments([]);
-    }
 }
-
-function renderComments(comments) {
-    const scroll = document.getElementById('commentsScroll');
-    if (!Array.isArray(comments) || !comments.length) {
-        scroll.innerHTML = '<div style="text-align:center;padding:30px 20px;color:var(--muted);font-size:13px">No comments yet. Be the first!</div>';
-        return;
-    }
-    const top = comments.filter(c => !c.parent_id)
-        .sort((a,b) => (b.net_votes||0) - (a.net_votes||0));
-    const byParent = {};
-    comments.filter(c => c.parent_id).forEach(c => {
-        (byParent[c.parent_id] = byParent[c.parent_id] || []).push(c);
-    });
-    // Seed vote state map so castVote has accurate starting points
-    _voteState.clear();
-    comments.forEach(c => _voteState.set(c.id, { myVote: c.my_vote || 0, net: c.net_votes || 0 }));
-    scroll.innerHTML = top.map(c => buildCommentHtml(c, byParent)).join('');
-}
-
-function buildCommentHtml(c, byParent, depth = 0) {
-    const author     = c.author || {};
-    const initials   = author.initials || '?';
-    const uid        = author.uid      || 'user';
-    const color      = author.color    || '#5b8dff';
-    const name       = author.name     || uid;
-    const time       = timeAgo(new Date(c.created_at));
-    const replyList  = (byParent[c.id] || []);
-    const replyCount = replyList.length;
-    // replies recurse with depth+1 (indent caps at depth 3)
-    const repliesHtml = replyList.map(r => buildCommentHtml(r, byParent, depth + 1)).join('');
-
-    const isMyComment = App.isLoggedIn && App.currentUser?.uid === uid;
-    const canDelete   = isMyComment || App.isAdmin;
-    const canEdit     = isMyComment;
-    const canReport   = App.isLoggedIn && !isMyComment && !App.isAdmin;
-    const safeName    = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    const hasDots     = canDelete || canEdit || canReport;
-
-    // votes — data stored on the comment object
-    const net       = c.net_votes || 0;
-    const myVote    = c.my_vote   || 0;
-    const voteColor = net > 0 ? '#5b8dff' : net < 0 ? '#e05a5a' : '#6b7080';
-
-    const cmenuItems = [
-        canEdit   ? `<div class="card-menu-item" onclick="startEditComment('${c.id}');closeCMenu('${c.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>Edit</div>` : '',
-        canDelete ? `<div class="card-menu-item danger" onclick="deleteComment('${c.id}');closeCMenu('${c.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M9 6V4h6v2"/></svg>Delete</div>` : '',
-        (canEdit || canDelete) && canReport ? '<div class="card-menu-sep"></div>' : '',
-        canReport ? `<div class="card-menu-item danger" onclick="openCommentReport('${c.id}');closeCMenu('${c.id}')"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>Report</div>` : '',
-    ].filter(Boolean).join('');
-
-    const indentStyle = depth > 0
-        ? `margin-left:${Math.min(depth,3)*14}px;padding-left:10px;border-left:2px solid rgba(255,255,255,0.07);`
-        : '';
-
-    return `
-    <div class="comment" data-comment-id="${c.id}" style="${indentStyle}">
-      <div class="comment-avatar" style="background:${color};cursor:pointer;width:${depth>0?26:30}px;height:${depth>0?26:30}px;font-size:${depth>0?10:11}px;flex-shrink:0"
-           onclick="openProfile('${safeName}','${initials}','${color}','${uid}','')">${initials}</div>
-      <div class="comment-body" style="position:relative;flex:1;min-width:0">
-        <div class="comment-user" onclick="openProfile('${safeName}','${initials}','${color}','${uid}','')"
-             style="cursor:pointer">u/${uid}</div>
-        <div class="comment-text" id="ctext-${c.id}">${escHtml(c.body)}</div>
-        <div class="comment-edit-form" id="cedit-${c.id}" style="display:none">
-          <textarea class="comment-edit-input" id="cedit-input-${c.id}">${escHtml(c.body)}</textarea>
-          <div style="display:flex;gap:6px;margin-top:5px">
-            <button class="reply-btn" onclick="saveEditComment('${c.id}')">Save</button>
-            <button class="reply-btn" onclick="cancelEditComment('${c.id}')">Cancel</button>
-          </div>
-        </div>
-        ${c.image_url ? `<img src="${c.image_url}" style="max-width:160px;max-height:120px;border-radius:8px;margin-top:6px;display:block;object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'160px':'100%';this.style.maxHeight=this.style.maxHeight==='none'?'120px':'none'">` : ''}
-        <div class="comment-meta">
-          <span class="comment-time">${time}</span>
-
-          <div class="vote-btns" id="votewrap-${c.id}">
-            <button class="vote-btn" id="vup-${c.id}"
-              style="color:${myVote===1?'#5b8dff':'#6b7080'}"
-              onclick="castVote(event,'${c.id}',1)">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="${myVote===1?'#5b8dff':'none'}" stroke="${myVote===1?'#5b8dff':'#6b7080'}" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
-            </button>
-            <span class="vote-count" id="vcount-${c.id}" style="color:${voteColor}">${net}</span>
-            <button class="vote-btn" id="vdn-${c.id}"
-              style="color:${myVote===-1?'#e05a5a':'#6b7080'}"
-              onclick="castVote(event,'${c.id}',-1)">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="${myVote===-1?'#e05a5a':'none'}" stroke="${myVote===-1?'#e05a5a':'#6b7080'}" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-            </button>
-          </div>
-
-          ${App.isLoggedIn ? `<button class="reply-btn" onclick="toggleReply(this,'${c.id}')">↩ Reply${replyCount>0?' ('+replyCount+')':''}</button>` : ''}
-        </div>
-
-        <div class="reply-form" id="reply-form-${c.id}" style="display:none"></div>
-
-        ${replyCount > 0 ? `
-        <div class="replies-toggle" onclick="toggleReplies('${c.id}',${replyCount})">
-          <span class="replies-toggle-line"></span>
-          <span class="replies-toggle-label" id="rtlabel-${c.id}">▸ ${replyCount} repl${replyCount===1?'y':'ies'}</span>
-        </div>
-        <div id="replies-${c.id}" style="display:none;flex-direction:column;gap:8px;margin-top:8px">${repliesHtml}</div>` : ''}
-
-        ${hasDots ? `
-        <button class="dots-btn" style="position:absolute;top:0;right:0;padding:2px 6px;font-size:11px"
-                onclick="toggleCMenu(event,'${c.id}')">•••</button>
-        <div class="card-menu" id="cmenu-${c.id}">${cmenuItems}</div>` : ''}
-      </div>
-    </div>`;
-}
-
-function escHtml(s) {
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-function timeAgo(date) {
-    const s = Math.floor((Date.now() - date) / 1000);
-    if (s < 60) return 'just now';
-    if (s < 3600) return Math.floor(s/60) + 'm ago';
-    if (s < 86400) return Math.floor(s/3600) + 'h ago';
-    return Math.floor(s/86400) + 'd ago';
-}
-
-async function deleteComment(commentId) {
-    const res = await sb.deleteComment(commentId);
-    if (res?.ok) document.querySelector(`.comment[data-comment-id="${commentId}"]`)?.remove();
-}
-
-function toggleReplies(cid, count) {
-    const wrap  = document.getElementById('replies-' + cid);
-    const label = document.getElementById('rtlabel-' + cid);
-    const open  = wrap.style.display !== 'none';
-    wrap.style.display  = open ? 'none' : 'flex';
-    label.textContent   = open
-        ? `▸ ${count} repl${count===1?'y':'ies'}`
-        : `▾ Hide repl${count===1?'y':'ies'}`;
-}
-
-// Track each comment's current vote state: { myVote, net }
-const _voteState = new Map();
-
-async function castVote(e, commentId, requestedVote) {
-    e.stopPropagation();
-    if (!App.isLoggedIn) { showToast('Sign in to vote'); return; }
-
-    const upBtn   = document.getElementById('vup-'   + commentId);
-    const dnBtn   = document.getElementById('vdn-'   + commentId);
-    const countEl = document.getElementById('vcount-' + commentId);
-    if (!upBtn || !dnBtn || !countEl) return;
-
-    // Get current state
-    const state   = _voteState.get(commentId) || { myVote: 0, net: parseInt(countEl.textContent) || 0 };
-    const prevVote = state.myVote;
-
-    // Clicking same vote again = remove it (toggle off)
-    const newVote = requestedVote === prevVote ? 0 : requestedVote;
-
-    // Calculate new net: remove previous contribution, add new
-    const newNet = state.net - prevVote + newVote;
-
-    // Store new state
-    _voteState.set(commentId, { myVote: newVote, net: newNet });
-
-    // Update UI immediately (optimistic)
-    applyVoteUI(upBtn, dnBtn, countEl, newVote, newNet);
-
-    // Send to server
-    const res = await sb.voteComment(commentId, newVote);
-    if (res?.ok) {
-        // Sync with server truth
-        const sv = res.net_votes, mv = res.my_vote;
-        _voteState.set(commentId, { myVote: mv, net: sv });
-        applyVoteUI(upBtn, dnBtn, countEl, mv, sv);
-    }
-}
-
-function applyVoteUI(upBtn, dnBtn, countEl, myVote, net) {
-    countEl.textContent = net;
-    countEl.style.color = net > 0 ? '#5b8dff' : net < 0 ? '#e05a5a' : '#6b7080';
-
-    const upOn = myVote === 1, dnOn = myVote === -1;
-    upBtn.style.color = upOn ? '#5b8dff' : '#6b7080';
-    upBtn.querySelector('svg').setAttribute('fill',   upOn ? '#5b8dff' : 'none');
-    upBtn.querySelector('svg').setAttribute('stroke', upOn ? '#5b8dff' : '#6b7080');
-    dnBtn.style.color = dnOn ? '#e05a5a' : '#6b7080';
-    dnBtn.querySelector('svg').setAttribute('fill',   dnOn ? '#e05a5a' : 'none');
-    dnBtn.querySelector('svg').setAttribute('stroke', dnOn ? '#e05a5a' : '#6b7080');
-}
-
-let _openCMenuId = null;
-function toggleCMenu(e, cid) {
-    e.stopPropagation();
-    if (_openCMenuId && _openCMenuId !== cid) closeCMenu(_openCMenuId);
-    const menu = document.getElementById('cmenu-' + cid);
-    if (!menu) return;
-    const isOpen = menu.classList.contains('open');
-    if (isOpen) { closeCMenu(cid); return; }
-
-    // Detect space: flip menu above or below the button
-    const btn     = e.target.closest('button') || e.target;
-    const btnRect = btn.getBoundingClientRect();
-    const panel  = document.getElementById('commentsPanel');
-    const panelRect = panel ? panel.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
-    const spaceAbove = btnRect.top - panelRect.top;
-    const spaceBelow = panelRect.bottom - btnRect.bottom;
-    const menuH  = 120; // approx menu height
-
-    if (spaceAbove < menuH && spaceBelow > menuH) {
-        // flip to open downward
-        menu.style.bottom = 'auto';
-        menu.style.top    = '28px';
-        menu.style.transformOrigin = 'top right';
-    } else {
-        // default: open upward
-        menu.style.top    = 'auto';
-        menu.style.bottom = '28px';
-        menu.style.transformOrigin = 'bottom right';
-    }
-
-    menu.classList.add('open');
-    _openCMenuId = cid;
-}
-function closeCMenu(cid) {
-    document.getElementById('cmenu-' + cid)?.classList.remove('open');
-    if (_openCMenuId === cid) _openCMenuId = null;
-}
-
-function startEditComment(cid) {
-    document.getElementById('ctext-' + cid).style.display = 'none';
-    document.getElementById('cedit-' + cid).style.display = '';
-    document.getElementById('cedit-input-' + cid).focus();
-}
-function cancelEditComment(cid) {
-    document.getElementById('ctext-' + cid).style.display = '';
-    document.getElementById('cedit-' + cid).style.display = 'none';
-}
-async function saveEditComment(cid) {
-    const input = document.getElementById('cedit-input-' + cid);
-    const body  = input.value.trim();
-    if (!body) return;
-    const res = await sb.editComment(cid, body);
-    if (res?.ok) {
-        document.getElementById('ctext-' + cid).textContent = body;
-        cancelEditComment(cid);
-    }
-}
-
-let _reportCommentId = null;
-function openCommentReport(cid) {
-    _reportCommentId = cid;
-    document.getElementById('reportReason').value = '';
-    document.getElementById('reportModal').classList.add('open');
-    document.body.style.overflow = 'hidden';
-    // Override submit to report comment instead of post
-    document.getElementById('reportBtn').onclick = submitCommentReport;
-}
-async function submitCommentReport() {
-    if (!_reportCommentId) return;
-    const reason = document.getElementById('reportReason').value.trim();
-    const btn = document.getElementById('reportBtn');
-    btn.textContent = 'Reporting…'; btn.disabled = true;
-    const res = await sb.reportComment(_reportCommentId, reason);
-    btn.textContent = 'Report'; btn.disabled = false;
-    if (res?.ok) { showToast('Comment reported'); closeReport(); }
-    else showToast(res?._error || 'Could not report');
-    _reportCommentId = null;
-    // Restore original onclick
-    document.getElementById('reportBtn').onclick = submitReport;
-}
-
 function closeComments() {
     document.getElementById('commentsPanel').classList.remove('open');
     document.getElementById('overlay').classList.remove('show');
     document.body.style.overflow='';
-    App.openPostId = null;
-    if (_commentSSE) { _commentSSE.close(); _commentSSE = null; }
 }
-
-function toggleReply(btn, parentId) {
-    const formEl = document.getElementById('reply-form-'+parentId);
-    if (!formEl) return;
-    if (formEl.innerHTML.trim()) {
-        formEl.style.display = formEl.style.display === 'none' ? 'flex' : 'none';
-    } else {
-        formEl.style.display='flex';
-        formEl.innerHTML=`<input class="reply-input" placeholder="Write a reply…" id="reply-input-${parentId}"><button class="reply-send" onclick="submitReply('${parentId}')">Send</button>`;
-        document.getElementById('reply-input-'+parentId).focus();
-    }
+function toggleReply(btn) {
+    const body=btn.closest('.comment-body');
+    const form=body.querySelector('.reply-form');
+    const user=body.querySelector('.comment-user').textContent;
+    if (!form.innerHTML.trim()) form.innerHTML=`<input class="reply-input" placeholder="Reply to ${user}…"><button class="reply-send" onclick="submitReply(this)">Send</button>`;
+    form.classList.toggle('visible');
+    if (form.classList.contains('visible')) form.querySelector('.reply-input').focus();
 }
-
-async function submitReply(parentId) {
-    if (!App.isLoggedIn) { showToast('Sign in to reply'); return; }
-    const input = document.getElementById('reply-input-'+parentId);
-    const body  = input?.value.trim();
-    if (!body) return;
-    input.value = '';
-    if (USE_SUPABASE) {
-        await sb.createComment(App.openPostId, body, parentId, null);
-        const comments = await sb.getComments(App.openPostId);
-        renderComments(comments || []);
-    }
+function submitReply(btn) {
+    const form=btn.closest('.reply-form');
+    const input=form.querySelector('.reply-input');
+    if (!input.value.trim()) return;
+    const replies=form.closest('.comment-body').querySelector('.replies');
+    const div=document.createElement('div'); div.className='reply';
+    div.innerHTML=`<div class="reply-avatar" style="background:var(--accent)">Me</div><div class="reply-body"><div class="comment-user">u/me</div><div class="comment-text" style="font-size:12px;color:#b0b6c5">${input.value}</div></div>`;
+    replies.appendChild(div); input.value=''; form.classList.remove('visible');
 }
-
-async function submitCommentClick() {
-    if (!App.isLoggedIn) { showToast('Sign in to comment'); return; }
-    const input = document.getElementById('commentInput');
-    const body  = input.value.trim();
-    if ((!body && !commentImageDataUrl) || !App.openPostId) return;
-    input.value = '';
-
-    if (USE_SUPABASE) {
-        // Upload comment image if attached
-        let imgUrl = null;
-        if (commentImageDataUrl) {
-            imgUrl = await sb.uploadImage(commentImageDataUrl, 'comments');
-            clearCommentImage();
-        }
-        await sb.createComment(App.openPostId, body || '', null, imgUrl);
-        const comments = await sb.getComments(App.openPostId);
-        renderComments(comments || []);
-        // Update comment count on card
-        const post = POSTS.find(p => p.id === App.openPostId);
-        if (post) {
-            post.comments = (post.comments || 0) + 1;
-            const el = document.getElementById('comment-count-'+App.openPostId);
-            if (el) el.textContent = post.comments;
-        }
-    }
+function submitCommentClick() {
+    const input=document.getElementById('commentInput');
+    if (!input.value.trim()) return;
+    const scroll=document.getElementById('commentsScroll');
+    const div=document.createElement('div'); div.className='comment';
+    div.innerHTML=`<div class="comment-avatar" style="background:var(--accent)">Me</div><div class="comment-body"><div class="comment-user">u/me</div><div class="comment-text">${input.value}</div><div class="comment-meta"><span class="comment-time">just now</span><button class="reply-btn" onclick="toggleReply(this)">Reply</button></div><div class="reply-form"></div><div class="replies"></div></div>`;
+    scroll.appendChild(div); input.value=''; scroll.scrollTop=scroll.scrollHeight;
 }
 
 // ── PROFILE ───────────────────────────────────────────────────────────────────
-let curProfile = {};
-
-async function openProfile(name, initials, color, uid, profileId) {
-    curProfile = { color, name, initials, uid, profileId };
-    document.getElementById('pAvatar').style.background = color;
-    document.getElementById('pAvatar').textContent      = initials;
-    document.getElementById('pName').textContent        = name;
-    document.getElementById('pHandle').textContent      = 'u/' + uid;
-    // clear verified badge until stats load
-    const pVerified = document.getElementById('pVerifiedBadge');
-    if (pVerified) pVerified.innerHTML = '';
-    document.getElementById('pPoints').textContent      = '…';
-    document.getElementById('pStatPosted').textContent  = '…';
-    document.getElementById('pStatReturned').textContent= '…';
-    document.getElementById('profileMsgBtn').style.display =
-        (App.isLoggedIn && uid === App.currentUser?.uid) ? 'none' : 'inline-flex';
-    document.getElementById('profileMsgBtn').onclick = () => tryDM(uid, name, initials, color);
-    document.getElementById('profileHistoryList').innerHTML =
-        '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading…</div>';
+let cur={};
+const pts=[320,480,640,750,840,910,1200,1450];
+function openProfile(name,initials,color,uid) {
+    cur={color,name:name+' B.',initials,uid};
+    document.getElementById('pAvatar').style.background=color;
+    document.getElementById('pAvatar').textContent=initials;
+    document.getElementById('pName').textContent=name+' B.';
+    document.getElementById('pHandle').textContent='u/'+uid;
+    document.getElementById('pPoints').textContent=pts[Math.floor(Math.random()*pts.length)]+' points';
+    document.getElementById('profileMsgBtn').style.display=
+        (App.isLoggedIn && uid===App.currentUser?.uid) ? 'none' : 'inline-flex';
     openSheet('profileSheet','profileOverlay');
-
-    if (!uid) return;
-
-    // Load real stats + posts in parallel — API uses uid not UUID
-    const [stats, posts] = await Promise.all([
-        sb.getProfileStats(uid),
-        sb.getPostsByUser(uid),
-    ]);
-
-    if (!stats || !posts) {
-        document.getElementById('pPoints').textContent       = '—';
-        document.getElementById('pStatPosted').textContent   = '—';
-        document.getElementById('pStatReturned').textContent = '—';
-        document.getElementById('profileHistoryList').innerHTML =
-            '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Could not load profile</div>';
-        return;
-    }
-
-    document.getElementById('pPoints').textContent       = stats.points + ' pts';
-    // set verified badge
-    const pvb = document.getElementById('pVerifiedBadge');
-    if (pvb) {
-        const r = stats.role;
-        pvb.innerHTML = r === 'super_admin'
-            ? '<span class="badge-verified gold" title="Super Admin" style="margin-left:5px">✓</span>'
-            : r === 'admin'
-            ? '<span class="badge-verified purple" title="Admin" style="margin-left:5px">✓</span>'
-            : '';
-    }
-    document.getElementById('pStatPosted').textContent   = stats.postCount;
-    document.getElementById('pStatReturned').textContent = (posts || []).filter(p => p.status === 'recovered').length;
-    const commentsEl = document.getElementById('pStatComments');
-    if (commentsEl) commentsEl.textContent = stats.commentCount;
-
-    // Show alert count on member profiles — visible to everyone, only for non-admins
-    const alertWrap = document.getElementById('pAlertWrap');
-    const alertStat = document.getElementById('pStatAlerts');
-    if (alertWrap) {
-        const targetIsAdmin = ['admin','super_admin'].includes(stats.role || '');
-        if (!targetIsAdmin && App.isAdmin) {
-            // Admins see the count
-            const alertData = await sb.getAlerts(uid);
-            const count = alertData?.count || 0;
-            if (alertStat) alertStat.textContent = count;
-            alertWrap.style.display = count > 0 ? '' : 'none';
-        } else if (!targetIsAdmin) {
-            // Members see count on other members' profiles too
-            const alertData = await sb.getAlerts(uid);
-            const count = alertData?.count || 0;
-            if (alertStat) alertStat.textContent = count;
-            alertWrap.style.display = count > 0 ? '' : 'none';
-        } else {
-            alertWrap.style.display = 'none';
-        }
-    }
-
-    const list = document.getElementById('profileHistoryList');
-    if (!posts.length) {
-        list.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No posts yet</div>';
-        return;
-    }
-    list.innerHTML = posts.map(r => {
-        const p = mapRow(r);
-        const badgeColor = p.status === 'found' ? 'rgba(34,201,122,0.1)' :
-                           p.status === 'lost'  ? 'rgba(77,166,255,0.1)' :
-                           p.status === 'recovered' ? 'rgba(232,168,56,0.1)' : 'rgba(138,143,158,0.1)';
-        const badgeText  = p.status === 'found' ? 'var(--found)' :
-                           p.status === 'lost'  ? 'var(--lost)'  :
-                           p.status === 'recovered' ? 'var(--recovered)' : 'var(--waiting)';
-        const badgeBorder= p.status === 'found' ? 'rgba(34,201,122,0.18)' :
-                           p.status === 'lost'  ? 'rgba(77,166,255,0.18)' :
-                           p.status === 'recovered' ? 'rgba(232,168,56,0.2)' : 'rgba(138,143,158,0.18)';
-        return `
-        <div class="activity-item" onclick="closeProfile();scrollToPost('${p.id}')">
-          <span class="act-badge" style="background:${badgeColor};color:${badgeText};border:1px solid ${badgeBorder}">${statusLabel(p.status)}</span>
-          <span style="font-size:13px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(p.title)}</span>
-          <span style="font-size:11px;color:var(--muted);flex-shrink:0">${p.date}</span>
-          <svg width="12" height="12" fill="none" stroke="var(--muted)" stroke-width="2" viewBox="0 0 24 24" style="margin-left:6px;flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>
-        </div>`;
-    }).join('');
 }
-
-// Scroll to a post in the feed and highlight it
-function scrollToPost(postId) {
-    // Make sure it's in the feed (reset filters if needed)
-    if (App.activeFilter !== 'all' || App.searchQuery) {
-        activeFilters.clear();
-        App.activeFilter = 'all';
-        App.searchQuery  = '';
-        document.getElementById('searchInput').value = '';
-        document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active'));
-        document.getElementById('chipAll')?.classList.add('active');
-        document.getElementById('filterExpand')?.classList.remove('open');
-        renderFeed();
-    }
-    const el = document.querySelector(`[data-post="${postId}"]`);
-    if (el) {
-        el.scrollIntoView({behavior:'smooth', block:'center'});
-        el.classList.add('card-highlight');
-        setTimeout(() => el.classList.remove('card-highlight'), 2000);
-    }
-}
-
 function closeProfile() { closeSheet('profileSheet','profileOverlay'); }
 
-function openSheet(id, overlayId) {
+function openSheet(id,overlayId) {
     document.getElementById(id).classList.add('open');
     if (overlayId) document.getElementById(overlayId).classList.add('open');
     document.body.style.overflow='hidden';
 }
-function closeSheet(id, overlayId) {
+function closeSheet(id,overlayId) {
     document.getElementById(id).classList.remove('open');
     if (overlayId) document.getElementById(overlayId).classList.remove('open');
     document.body.style.overflow='';
 }
 
-// ── DM ────────────────────────────────────────────────────────────────────────
-function tryDM(targetUid, targetName, targetInitials, targetColor) {
-    if (!App.isLoggedIn) { openLogin(); return; }
-    closeProfile();
-    const sheet = document.getElementById('dmSheet');
-    sheet.classList.add('open');
-    document.body.style.overflow = 'hidden';
-    if (targetUid) {
-        setTimeout(() => openDMThread(targetUid, targetName, targetInitials, targetColor), 80);
-    } else {
-        setTimeout(() => showDMInbox(), 80);
-    }
+function openHistoryItem(title,desc,status,location,date,category) {
+    document.getElementById('hTitle').textContent=title;
+    document.getElementById('hDesc').textContent=desc;
+    document.getElementById('hDate').textContent=date;
+    document.getElementById('hLocation').textContent=location;
+    document.getElementById('hCategory').textContent=category;
+    const sb2=document.getElementById('hStatus');
+    sb2.textContent=statusLabel(status); sb2.className='status-badge '+statusClass(status);
+    openSheet('historySheet');
 }
+function closeHistoryItem() { closeSheet('historySheet'); document.body.style.overflow='hidden'; }
 
 // ── DM ────────────────────────────────────────────────────────────────────────
-let _dmOtherUid = null;
-
-async function openDMSheet() {
-    updateDMBadge(0);  // clear badge immediately on open
-    if (!App.isLoggedIn) { openLogin(); return; }
-    document.getElementById('dmSheet').classList.add('open');
-    document.body.style.overflow = 'hidden';
-    showDMInbox();
-}
-
-async function showDMInbox() {
-    _dmOtherUid = null;
-    document.getElementById('dmInbox').style.display  = 'flex';
-    document.getElementById('dmInbox').style.flexDirection = 'column';
-    document.getElementById('dmThread').style.display = 'none';
-
-    const list = document.getElementById('dmConvoList');
-    list.innerHTML = '<div style="text-align:center;padding:32px 0;color:var(--muted);font-size:13px">Loading…</div>';
-
-    const convos = await sb.getConversations();
-    if (!convos || !convos.length) {
-        list.innerHTML = '<div style="text-align:center;padding:40px 16px;color:var(--muted);font-size:13px">No messages yet. Open someone\'s profile and tap Message.</div>';
-        return;
-    }
-    list.innerHTML = convos.map(c => `
-    <div class="dm-convo-item" onclick="openDMThread('${c.uid}','${escHtml(c.name)}','${c.initials}','${c.color}')">
-        <div class="dm-avatar" style="background:${c.color};flex-shrink:0;cursor:pointer"
-             onclick="event.stopPropagation();closeDM();openProfile('${escHtml(c.name)}','${c.initials}','${c.color}','${c.uid}','')">${c.initials}</div>
-        <div style="flex:1;min-width:0">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-                <span style="font-weight:600;font-size:13px">u/${escHtml(c.uid)}</span>
-                <span style="font-size:11px;color:var(--muted)">${c.last_at ? timeAgo(new Date(c.last_at)) : ''}</span>
-            </div>
-            <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(c.last_msg || '')}</div>
-        </div>
-        ${c.unread > 0 ? `<div style="background:var(--accent);color:#fff;border-radius:50%;min-width:18px;height:18px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px;flex-shrink:0">${c.unread}</div>` : ''}
-    </div>`).join('');
-}
-
-async function openDMThread(otherUid, name, initials, color) {
-    _dmOtherUid = otherUid;
-    document.getElementById('dmInbox').style.display  = 'none';
-    document.getElementById('dmThread').style.display = 'flex';
-    const avatarEl = document.getElementById('dmAvatar');
-    avatarEl.style.background = color;
-    avatarEl.textContent      = initials;
-    avatarEl.style.cursor     = 'pointer';
-    avatarEl.onclick          = () => { closeDM(); openProfile(name || otherUid, initials, color, otherUid, ''); };
-    document.getElementById('dmName').textContent = name || ('u/' + otherUid);
-    document.getElementById('dmName').style.cursor = 'pointer';
-    document.getElementById('dmName').onclick = () => { closeDM(); openProfile(name || otherUid, initials, color, otherUid, ''); };
-
-    const msgs = document.getElementById('dmMessages');
-    msgs.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading…</div>';
-
-    const data = await sb.getDMThread(otherUid);
-    if (!data) { msgs.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Could not load messages</div>'; return; }
-
-    renderDMMessages(data.messages);
-    document.getElementById('dmInput').focus();
-    // DM messages arrive live via SSE (_dmSSE) — no polling needed
-}
-
-function renderDMMessages(messages) {
-    const msgs = document.getElementById('dmMessages');
-    if (!messages.length) {
-        msgs.innerHTML = '<div style="text-align:center;padding:40px 16px;color:var(--muted);font-size:13px">No messages yet. Say hi! 👋</div>';
-        return;
-    }
-    msgs.innerHTML = messages.map(m => {
-        const isMe = m.sender_uid === App.currentUser?.uid;
-        const imgHtml = m.image_url ? `<img src="${m.image_url}" style="max-width:180px;max-height:160px;border-radius:8px;display:block;margin-top:${m.body?'6px':'0'};object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'180px':'100%'">` : '';
-        return `<div class="dm-msg ${isMe ? 'me' : 'them'}">${m.body ? escHtml(m.body) : ''}${imgHtml}</div>`;
-    }).join('');
-    msgs.scrollTop = msgs.scrollHeight;
-}
-
-let _dmImageDataUrl = null;
-
-function handleDMImageFile(file) {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-        _dmImageDataUrl = e.target.result;
-        document.getElementById('dmImagePreview').src = e.target.result;
-        document.getElementById('dmImagePreviewWrap').style.display = 'flex';
-    };
-    reader.readAsDataURL(file);
-}
-
-function clearDMImage() {
-    _dmImageDataUrl = null;
-    document.getElementById('dmImagePreview').src = '';
-    document.getElementById('dmImagePreviewWrap').style.display = 'none';
-    document.getElementById('dmImageInput').value = '';
-}
-
-async function sendDMClick() {
-    if (!_dmOtherUid) return;
-    const input = document.getElementById('dmInput');
-    const body  = input.value.trim();
-    if (!body && !_dmImageDataUrl) return;
-    input.value = '';
-
-    // Upload image if attached
-    let imageUrl = null;
-    if (_dmImageDataUrl) {
-        imageUrl = await sb.uploadImage(_dmImageDataUrl, 'dms');
-        clearDMImage();
-    }
-
-    const res = await sb.sendDM(_dmOtherUid, body, imageUrl);
-    if (res) {
-        const msgs = document.getElementById('dmMessages');
-        const empty = msgs.querySelector('div[style*="padding:40px"]');
-        if (empty) empty.remove();
-        const div = document.createElement('div');
-        div.className = 'dm-msg me';
-        div.innerHTML = `${body ? escHtml(body) : ''}${imageUrl ? `<img src="${imageUrl}" style="max-width:180px;max-height:160px;border-radius:8px;display:block;margin-top:${body?'6px':'0'};object-fit:cover;cursor:pointer" onclick="this.style.maxWidth=this.style.maxWidth==='100%'?'180px':'100%'">` : ''}`;
-        msgs.appendChild(div);
-        msgs.scrollTop = msgs.scrollHeight;
-    }
-}
-
-function closeDM() {
-    document.getElementById('dmSheet').classList.remove('open');
-    // Re-poll badge after closing (messages may have been read)
-    setTimeout(pollDMBadge, 500);
-    document.body.style.overflow = '';
-    _dmOtherUid = null;
-}
-
-// Legacy openDM called from profile sheet
 function openDM() {
     closeProfile();
-    setTimeout(() => {
-        if (curProfile?.uid) openDMThread(curProfile.uid, curProfile.name, curProfile.initials, curProfile.color);
-        else openDMSheet();
-    }, 160);
+    document.getElementById('dmAvatar').style.background=cur.color;
+    document.getElementById('dmAvatar').textContent=cur.initials;
+    document.getElementById('dmName').textContent=cur.name;
+    setTimeout(()=>{document.getElementById('dmSheet').classList.add('open');document.body.style.overflow='hidden';},160);
+}
+function closeDM() { document.getElementById('dmSheet').classList.remove('open'); document.body.style.overflow=''; }
+function sendDMClick() {
+    const input=document.getElementById('dmInput');
+    if (!input.value.trim()) return;
+    const msgs=document.getElementById('dmMessages');
+    const div=document.createElement('div'); div.className='dm-msg me'; div.textContent=input.value;
+    msgs.appendChild(div); input.value=''; msgs.scrollTop=msgs.scrollHeight;
 }
 
 // ── LOCATION ──────────────────────────────────────────────────────────────────
 function openLocation(name) {
-    document.getElementById('locTitle').textContent = name;
-    const related = POSTS.filter(p => p.location.toLowerCase() === name.toLowerCase());
-    document.getElementById('locCount').textContent = related.length+' item'+(related.length!==1?'s':'')+' reported here';
-    document.getElementById('locList').innerHTML = related.map(p=>`
-    <div class="loc-card" onclick="closeLocation();scrollToPost('${p.id}')">
+    document.getElementById('locTitle').textContent=name;
+    const related=(LOCATIONS[name]||[]).map(id=>POSTS.find(p=>p.id===id)).filter(Boolean);
+    document.getElementById('locCount').textContent=related.length+' item'+(related.length!==1?'s':'')+' reported here';
+    document.getElementById('locList').innerHTML=related.map(p=>`
+    <div class="loc-card">
       <div class="loc-card-head">
         <div class="card-avatar" style="background:${p.ownerColor};width:26px;height:26px;font-size:9px;flex-shrink:0">${p.ownerInitials}</div>
         <div class="loc-card-meta"><span class="lc-loc">${p.location}</span><span class="lc-uid">u/${p.owner}</span></div>
         <span class="status-badge ${statusClass(p.status)}" style="font-size:10px;padding:2px 7px">${statusLabel(p.status)}</span>
       </div>
-      <div class="loc-card-title">${escHtml(p.title)}</div>
-      <div class="loc-card-desc">${escHtml(p.desc.substring(0,80))}…</div>
+      <div class="loc-card-title">${p.title}</div>
+      <div class="loc-card-desc">${p.desc.substring(0,80)}…</div>
     </div>`).join('');
     openSheet('locSheet','locOverlay');
 }
 function closeLocation() { closeSheet('locSheet','locOverlay'); }
 
 // ── POST ──────────────────────────────────────────────────────────────────────
-let postImageDataUrl = null;
-
 function tryPost() {
     if (!App.isLoggedIn) {
         document.getElementById('signinReqModal').classList.add('open');
         document.body.style.overflow='hidden'; return;
     }
-    document.getElementById('postTitle').value='';
-    document.getElementById('postDesc').value='';
-    clearImage();
     document.getElementById('postModal').classList.add('open');
     document.body.style.overflow='hidden';
 }
 function closePost() { document.getElementById('postModal').classList.remove('open'); document.body.style.overflow=''; }
 function closeSigninReq() { document.getElementById('signinReqModal').classList.remove('open'); document.body.style.overflow=''; }
 
-// ── IMAGE HELPERS ─────────────────────────────────────────────────────────────
-function handleImageFile(file) {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = e => showImagePreview(e.target.result);
-    reader.readAsDataURL(file);
-}
-function handleImageDrop(e) {
-    e.preventDefault();
-    document.getElementById('uploadArea').classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (file) handleImageFile(file);
-}
-function showImagePreview(dataUrl) {
-    postImageDataUrl = dataUrl;
-    document.getElementById('uploadPlaceholder').style.display='none';
-    document.getElementById('uploadPreviewWrap').style.display='block';
-    document.getElementById('uploadPreview').src=dataUrl;
-}
-function clearImage() {
-    postImageDataUrl = null;
-    document.getElementById('uploadPlaceholder').style.display='';
-    document.getElementById('uploadPreviewWrap').style.display='none';
-    document.getElementById('uploadPreview').src='';
-    document.getElementById('postImageInput').value='';
-}
-
-// ── EDIT IMAGE HELPERS ───────────────────────────────────────────────────────
-let editImageDataUrl = null;
-let editImageCleared = false;
-
-function handleEditImageFile(file) {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-        editImageDataUrl = e.target.result;
-        editImageCleared = false;
-        document.getElementById('editUploadPlaceholder').style.display='none';
-        document.getElementById('editUploadPreviewWrap').style.display='block';
-        document.getElementById('editImagePreview').src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-}
-function clearEditImage() {
-    editImageDataUrl = null;
-    editImageCleared = true;
-    document.getElementById('editUploadPlaceholder').style.display='';
-    document.getElementById('editUploadPreviewWrap').style.display='none';
-    document.getElementById('editImagePreview').src='';
-    document.getElementById('editImageInput').value='';
-}
-
-// ── COMMENT IMAGE HELPERS ─────────────────────────────────────────────────────
-let commentImageDataUrl = null;
-
-function handleCommentImageFile(file) {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-        commentImageDataUrl = e.target.result;
-        document.getElementById('commentImagePreview').src = e.target.result;
-        document.getElementById('commentImagePreviewWrap').style.display='flex';
-    };
-    reader.readAsDataURL(file);
-}
-function clearCommentImage() {
-    commentImageDataUrl = null;
-    document.getElementById('commentImagePreview').src='';
-    document.getElementById('commentImagePreviewWrap').style.display='none';
-    document.getElementById('commentImageInput').value='';
-}
-
-document.addEventListener('paste', e => {
-    if (!document.getElementById('postModal').classList.contains('open')) return;
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-        if (item.type.startsWith('image/')) { handleImageFile(item.getAsFile()); break; }
-    }
-});
-
-// ── SUBMIT POST ───────────────────────────────────────────────────────────────
-async function submitPost() {
-    if (!App.isLoggedIn) return;
-    const title    = document.getElementById('postTitle').value.trim();
-    const desc     = document.getElementById('postDesc').value.trim();
-    const location = document.getElementById('postLocation').value;
-    const category = document.getElementById('postCategory').value;
-    const status   = document.getElementById('postStatus').value;
-    if (!title) { document.getElementById('postTitle').focus(); showToast('Please enter a title'); return; }
-
-    try {
-        const now     = new Date();
-        const dateStr = now.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
-        const tempId  = 'temp-' + Date.now();
-        const newPost = {
-            id:            tempId,
-            owner:         App.currentUser.uid,
-            ownerName:     App.currentUser.name,
-            ownerInitials: App.currentUser.initials,
-            ownerColor:    App.currentUser.color,
-            ownerId:       App.currentUser.id,
-            title, desc, location, category, status,
-            date:     dateStr,
-            comments: 0,
-            hasImage: !!postImageDataUrl,
-            _imageUrl: postImageDataUrl || null,
-        };
-        if (!Array.isArray(window.POSTS)) window.POSTS = [];
-        POSTS.unshift(newPost);
-        closePost();
-        renderFeed();
-        showToast('Post published!');
-
-        if (USE_SUPABASE) {
-            // Upload image to Supabase Storage first so it has a real public URL
-            let imageUrl = null;
-            if (postImageDataUrl) {
-                imageUrl = await sb.uploadImage(postImageDataUrl, 'posts');
-                // Update local post with real URL right away
-                const tempPost = POSTS.find(p => p.id === tempId);
-                if (tempPost && imageUrl) { tempPost._imageUrl = imageUrl; renderFeed(); }
-            }
-            const saved = await sb.createPost({ author_id: App.currentUser.id, title, description: desc, location, category, status, image_url: imageUrl });
-            if (saved && saved[0]) {
-                const realPost = mapRow({ ...saved[0],
-                    author_uid:      App.currentUser.uid,
-                    author_name:     App.currentUser.name,
-                    author_initials: App.currentUser.initials,
-                    author_color:    App.currentUser.color,
-                });
-                const idx = POSTS.findIndex(p => p.id === tempId);
-                if (idx > -1) POSTS[idx] = realPost;
-                renderFeed();
-            }
-        }
-    } catch(err) {
-        console.error('submitPost error:', err);
-        showToast('Something went wrong — check console (F12)');
-    }
-}
-
 // ── EDIT ──────────────────────────────────────────────────────────────────────
 let editingPostId=null, editSelectedStatus=null;
 function openEdit(postId) {
-    editingPostId=postId; editSelectedStatus=null; editImageDataUrl=null; editImageCleared=false;
+    editingPostId=postId; editSelectedStatus=null;
     document.querySelectorAll('.status-opt').forEach(o=>o.className='status-opt');
     const post=POSTS.find(p=>p.id===postId); if (!post) return;
     document.getElementById('editTitle').value=post.title;
     document.getElementById('editDesc').value=post.desc;
     const cur=document.querySelector(`.status-opt[data-status="${post.status}"]`);
     if (cur) { cur.classList.add('sel-'+post.status); editSelectedStatus=post.status; }
-    // Show existing image if any
-    const preview = document.getElementById('editImagePreview');
-    const placeholder = document.getElementById('editUploadPlaceholder');
-    const previewWrap = document.getElementById('editUploadPreviewWrap');
-    if (post._imageUrl) {
-        preview.src = post._imageUrl;
-        placeholder.style.display='none';
-        previewWrap.style.display='block';
-    } else {
-        preview.src='';
-        placeholder.style.display='';
-        previewWrap.style.display='none';
-    }
     document.getElementById('editModal').classList.add('open');
     document.body.style.overflow='hidden';
 }
@@ -1323,20 +360,7 @@ async function saveEdit() {
     if (newTitle) post.title=newTitle;
     if (newDesc)  post.desc=newDesc;
     if (editSelectedStatus) post.status=editSelectedStatus;
-
-    const fields = { title: post.title, description: post.desc, status: post.status };
-
-    if (USE_SUPABASE) {
-        // Upload new image if one was selected
-        if (editImageDataUrl) {
-            const imageUrl = await sb.uploadImage(editImageDataUrl, 'posts');
-            if (imageUrl) { post._imageUrl = imageUrl; fields.image_url = imageUrl; }
-        } else if (editImageCleared) {
-            post._imageUrl = null;
-            fields.image_url = null;
-        }
-        await sb.updatePost(post.id, fields);
-    }
+    if (USE_SUPABASE) await sb.updatePost(post.id, {title:post.title,description:post.desc,status:post.status});
     closeEdit(); renderFeed(); showToast('Post updated');
 }
 
@@ -1358,195 +382,74 @@ async function confirmDelete() {
 }
 
 // ── ADMIN LINK ────────────────────────────────────────────────────────────────
-function openAdminDashboard() { toggleMenu(); window.location.href='admin.html'; }
+function openAdminDashboard() { toggleMenu(); window.open('admin.html','_blank'); }
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 function openLogin() {
-    document.getElementById('menuDropdown').classList.remove('open');
-    document.getElementById('loginMainWrap').style.display='';
+    toggleMenu();
+    document.getElementById('loginFormWrap').style.display='';
+    document.getElementById('loginSent').style.display='none';
     document.getElementById('adminRequestWrap').style.display='none';
-    document.getElementById('adminRequestSent').style.display='none';
-    document.getElementById('loginError').style.display='none';
-    document.getElementById('registerError').style.display='none';
-    document.getElementById('loginUid').value='';
-    document.getElementById('loginPw').value='';
-    document.getElementById('regName').value='';
-    document.getElementById('regUid').value='';
-    document.getElementById('regPw').value='';
-    document.getElementById('loginPw').value='';
-    document.getElementById('regName').value='';
-    document.getElementById('regUid').value='';
-    document.getElementById('regPw').value='';
-    switchLoginTab('login');
+    document.getElementById('loginEmail').value='';
+    document.getElementById('loginEmail').style.borderColor='';
     document.getElementById('loginModal').classList.add('open');
     document.body.style.overflow='hidden';
 }
-function switchLoginTab(tab) {
-    const isLogin = tab === 'login';
-    document.getElementById('loginTab').style.display    = isLogin ? '' : 'none';
-    document.getElementById('registerTab').style.display = isLogin ? 'none' : '';
-    document.getElementById('tabLoginBtn').style.background    = isLogin ? 'var(--surface)' : 'transparent';
-    document.getElementById('tabLoginBtn').style.color         = isLogin ? 'var(--text)' : 'var(--muted)';
-    document.getElementById('tabRegisterBtn').style.background = isLogin ? 'transparent' : 'var(--surface)';
-    document.getElementById('tabRegisterBtn').style.color      = isLogin ? 'var(--muted)' : 'var(--text)';
-    document.getElementById('loginError').style.display    = 'none';
-    document.getElementById('registerError').style.display = 'none';
-}
-
-function showAdminRequest() {
-    document.getElementById('loginMainWrap').style.display = 'none';
-    document.getElementById('adminRequestWrap').style.display = 'block';
-}
-
-async function doLogin() {
-    const uid = document.getElementById('loginUid').value.trim();
-    const pw  = document.getElementById('loginPw').value;
-    const err = document.getElementById('loginError');
-    err.style.display = 'none';
-    if (!uid || !pw) { err.textContent='Enter username and password'; err.style.display=''; return; }
-    const btn = document.getElementById('loginBtn');
-    btn.textContent='Logging in…'; btn.disabled=true;
-    const res = await sb.login(uid, pw);
-    btn.textContent='Log in'; btn.disabled=false;
-    if (!res || res._error) {
-        err.textContent = res?._error || 'Could not reach server';
-        err.style.display=''; return;
-    }
-    await afterAuth(res);
-}
-
-async function doRegister() {
-    const name = document.getElementById('regName').value.trim();
-    const uid  = document.getElementById('regUid').value.trim();
-    const pw   = document.getElementById('regPw').value;
-    const err  = document.getElementById('registerError');
-    err.style.display = 'none';
-    if (!uid || !pw) { err.textContent='Fill in all fields'; err.style.display=''; return; }
-    const btn = document.getElementById('registerBtn');
-    btn.textContent='Creating…'; btn.disabled=true;
-    const res = await sb.register(uid, pw, name || uid);
-    btn.textContent='Create account'; btn.disabled=false;
-    if (!res || res._error) {
-        err.textContent = res?._error || 'Could not reach server';
-        err.style.display=''; return;
-    }
-    await afterAuth(res);
-}
-
-async function afterAuth(res) {
-    setUser(res);
-    closeLogin();
-    updateMenuState();
-    const rows = await sb.getPosts();
-    POSTS = (rows || []).map(mapRow);
-    renderFeed();
-    showToast('Welcome, ' + App.currentUser.uid + '!');
-}
-
-// kept for compat
-async function sendMagicLink() {}
-async function verifyOtp() {}
 function closeLogin() { document.getElementById('loginModal').classList.remove('open'); document.body.style.overflow=''; }
 
+async function sendMagicLink() {
+    const email=document.getElementById('loginEmail').value.trim();
+    if (!email||!email.includes('@')) {
+        document.getElementById('loginEmail').style.borderColor='rgba(224,90,90,0.5)';
+        document.getElementById('loginEmail').focus(); return;
+    }
+    if (USE_SUPABASE) {
+        const ok = await sb.sendMagicLink(email);
+        if (!ok) { showToast('Could not send email. Check the address.'); return; }
+    }
+    document.getElementById('loginFormWrap').style.display='none';
+    document.getElementById('loginSent').style.display='block';
+    document.getElementById('loginSentMsg').innerHTML=`We sent a sign-in link to<br><strong>${email}</strong><br><br>Click it to log in — no password required.`;
+    if (!USE_SUPABASE) {
+        setTimeout(()=>{
+            App.isLoggedIn=true;
+            App.currentUser={ id:'demo', uid: email.split('@')[0].replace(/\./g,'_'), name:email.split('@')[0], initials:email.split('@')[0].substring(0,2).toUpperCase(), color:'#5b8dff', role:'user' };
+            closeLogin(); updateMenuState(); renderFeed(); showToast('Signed in (demo)');
+        },1500);
+    }
+}
+
 // ── ADMIN REQUEST FORM ────────────────────────────────────────────────────────
-function contactAdmin() { showAdminRequest(); }
+function contactAdmin() {
+    // show in-app form instead of opening email client (nicer UX)
+    document.getElementById('loginFormWrap').style.display='none';
+    document.getElementById('adminRequestWrap').style.display='block';
+}
 function backToLogin() {
     document.getElementById('adminRequestWrap').style.display='none';
-    document.getElementById('adminRequestSent').style.display='none';
-    document.getElementById('loginMainWrap').style.display='';
+    document.getElementById('loginFormWrap').style.display='block';
 }
-function backToEmailStep() { backToLogin(); }
+async function submitAdminRequest() {
+    const name      = document.getElementById('arName').value.trim();
+    const roleTitle = document.getElementById('arRole').value.trim();
+    const reason    = document.getElementById('arReason').value.trim();
+    const email     = document.getElementById('arEmail').value.trim();
+    if (!name||!roleTitle||!reason||!email) { showToast('Please fill in all fields'); return; }
+    if (USE_SUPABASE && App.isLoggedIn) {
+        await sb.submitAdminRequest({
+            user_id: App.currentUser.id, email, name, role_title: roleTitle, reason,
+        });
+    }
+    // Always show confirmation — even in demo mode
+    document.getElementById('adminRequestWrap').style.display='none';
+    document.getElementById('adminRequestSent').style.display='block';
+}
+
+// ── SHARE ─────────────────────────────────────────────────────────────────────
 function shareItem(btn) {
     const orig=btn.innerHTML;
     navigator.clipboard?.writeText(window.location.href);
     btn.textContent='Copied'; setTimeout(()=>btn.innerHTML=orig,1600);
-}
-
-// ── ADMIN REQUEST MODAL ──────────────────────────────────────────────────────
-function openAdminRequestModal() {
-    document.getElementById('menuDropdown').classList.remove('open');
-    document.getElementById('adminReqModal').classList.add('open');
-    document.getElementById('adminReqSent').style.display = 'none';
-    document.getElementById('adminReqForm').style.display = '';
-    clearArId();
-    document.getElementById('arUid').value = App.currentUser?.uid || '';
-    document.body.style.overflow = 'hidden';
-}
-function closeAdminReqModal() {
-    document.getElementById('adminReqModal').classList.remove('open');
-    document.body.style.overflow = '';
-}
-
-// ── ADMIN REQUEST ────────────────────────────────────────────────────────────
-let _arIdDataUrl = null;
-
-function handleArIdFile(file) {
-    if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-        _arIdDataUrl = e.target.result;
-        document.getElementById('arIdPreview').src = e.target.result;
-        document.getElementById('arIdPlaceholder').style.display = 'none';
-        document.getElementById('arIdPreviewWrap').style.display = 'block';
-    };
-    reader.readAsDataURL(file);
-}
-function clearArId() {
-    _arIdDataUrl = null;
-    document.getElementById('arIdPreview').src = '';
-    document.getElementById('arIdPlaceholder').style.display = '';
-    document.getElementById('arIdPreviewWrap').style.display = 'none';
-    document.getElementById('arIdInput').value = '';
-}
-
-async function submitAdminRequest() {
-    if (!_arIdDataUrl) { showToast('Please upload your staff ID photo'); return; }
-    const uid = document.getElementById('arUid')?.value.trim() || App.currentUser?.uid || '';
-    const btn = document.getElementById('adminReqBtn');
-    if (btn) { btn.textContent = 'Uploading…'; btn.disabled = true; }
-
-    // Upload the ID image
-    let idImageUrl = null;
-    idImageUrl = await sb.uploadImage(_arIdDataUrl, 'staff-ids');
-    if (!idImageUrl) {
-        if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
-        showToast('Could not upload image. Try again.');
-        return;
-    }
-
-    if (btn) btn.textContent = 'Sending…';
-    const res = await sb.submitAdminRequest({ uid, role_title: 'staff', reason: 'Staff ID submitted', email: uid, name: uid || 'unknown', id_image_url: idImageUrl });
-    if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
-    if (!res || res._error) { showToast('Could not send request. Try again.'); return; }
-    document.getElementById('adminReqForm').style.display = 'none';
-    document.getElementById('adminReqSent').style.display = 'block';
-}
-
-// ── REPORT ───────────────────────────────────────────────────────────────────
-let _reportPostId = null;
-function openReport(postId) {
-    _reportPostId = postId;
-    document.getElementById('reportModal').classList.add('open');
-    document.body.style.overflow = 'hidden';
-}
-function closeReport() {
-    document.getElementById('reportModal').classList.remove('open');
-    document.body.style.overflow = '';
-    _reportPostId = null;
-}
-async function submitReport() {
-    if (!_reportPostId) return;
-    const reason = document.getElementById('reportReason').value.trim();
-    const btn = document.getElementById('reportBtn');
-    btn.textContent = 'Reporting…'; btn.disabled = true;
-    const res = await sb.reportPost(_reportPostId, reason);
-    btn.textContent = 'Report'; btn.disabled = false;
-    if (res && !res._error) {
-        showToast('Report submitted');
-        closeReport();
-    } else {
-        showToast(res?._error || 'Could not submit report');
-    }
 }
 
 // ── TOAST ─────────────────────────────────────────────────────────────────────
@@ -1555,42 +458,182 @@ function showToast(msg) {
     t.textContent=msg; t.classList.add('show');
     setTimeout(()=>t.classList.remove('show'),2200);
 }
+// ══════════════════════════════════════════════════════════════════════════════
+// ── IMAGE SEARCH ──────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+let imgSearchFile = null;
+let imgSearchFilter = 'all';
 
-
-// ── SHEET DRAG TO RESIZE ──────────────────────────────────────────────────────
-let _drag = null;
-
-function startDrag(e, sheetId) {
-    const sheet = document.getElementById(sheetId);
-    if (!sheet) return;
-    e.preventDefault();
-
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const startY  = clientY;
-    const startH  = sheet.getBoundingClientRect().height;
-    const maxH    = window.innerHeight * 0.95;
-    const minH    = 200;
-
-    sheet.style.transition = 'none';
-
-    function onMove(ev) {
-        const y    = ev.touches ? ev.touches[0].clientY : ev.clientY;
-        const diff = startY - y;
-        const newH = Math.min(maxH, Math.max(minH, startH + diff));
-        sheet.style.height = newH + 'px';
-        sheet.style.maxHeight = newH + 'px';
-    }
-
-    function onEnd() {
-        sheet.style.transition = '';
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onEnd);
-        document.removeEventListener('touchmove', onMove);
-        document.removeEventListener('touchend', onEnd);
-    }
-
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onEnd);
-    document.addEventListener('touchmove', onMove, { passive: false });
-    document.addEventListener('touchend', onEnd);
+function openImageSearch() {
+    document.getElementById('imgSearchModal').classList.add('open');
+    document.getElementById('imgSearchOverlay').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    // paste listener
+    document.addEventListener('paste', handleImgPaste);
 }
+function closeImageSearch() {
+    document.getElementById('imgSearchModal').classList.remove('open');
+    document.getElementById('imgSearchOverlay').classList.remove('open');
+    document.body.style.overflow = '';
+    document.removeEventListener('paste', handleImgPaste);
+}
+
+function handleImgPaste(e) {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+    if (item) handleImgFile(item.getAsFile());
+}
+function handleImgDrop(e) {
+    e.preventDefault();
+    document.getElementById('imgDropZone').classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) handleImgFile(file);
+}
+function handleImgFile(file) {
+    if (!file) return;
+    imgSearchFile = file;
+    const url = URL.createObjectURL(file);
+    const preview = document.getElementById('imgPreview');
+    preview.src = url;
+    preview.style.display = 'block';
+    document.getElementById('imgDropContent').style.display = 'none';
+    document.getElementById('imgSearchRunBtn').disabled = false;
+    document.getElementById('imgSearchResults').innerHTML = '';
+}
+
+function selectImgFilter(el) {
+    document.querySelectorAll('#imgFilterChips .filter-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+    imgSearchFilter = el.dataset.imgfilter;
+}
+
+async function runImageSearch() {
+    if (!imgSearchFile) return;
+    const btn = document.getElementById('imgSearchRunBtn');
+    const resultsEl = document.getElementById('imgSearchResults');
+    btn.disabled = true;
+    btn.textContent = 'Searching…';
+    resultsEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Analyzing image…</div>';
+
+    try {
+        const form = new FormData();
+        form.append('file', imgSearchFile);
+        const API = window.API_BASE || '';
+        const res  = await fetch(`${API}/search/image?status_filter=${imgSearchFilter}`, {
+            method: 'POST', body: form
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const results = await res.json();
+
+        if (!results.length) {
+            resultsEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No similar images found</div>';
+        } else {
+            resultsEl.innerHTML = results.map(p => `
+                <div class="img-result-item" onclick="closeImageSearch();openComments('${p.id}')">
+                    ${p.image_url
+                        ? `<img class="img-result-thumb" src="${(window.API_BASE||'')}${p.image_url}" onerror="this.style.display='none'">`
+                        : `<div class="img-result-thumb" style="display:flex;align-items:center;justify-content:center;font-size:20px">📦</div>`}
+                    <div class="img-result-info">
+                        <div class="img-result-title">${p.title}</div>
+                        <div class="img-result-meta">${p.status} · ${p.location}</div>
+                    </div>
+                    <div class="img-result-sim">${Math.round(p.similarity * 100)}%</div>
+                </div>
+            `).join('');
+        }
+    } catch(err) {
+        resultsEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--lost);font-size:13px">Error: ${err.message}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Search';
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── AUTO-MATCH PANEL (logo button) ────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+let _imageMatches = [];
+
+function toggleMatchPanel() {
+    const panel = document.getElementById('matchPanel');
+    if (panel.style.display === 'none' || !panel.style.display) {
+        if (_imageMatches.length) {
+            openMatchPanel();
+        } else {
+            goHome(); // no matches yet, behave like before
+        }
+    } else {
+        closeMatchPanel();
+    }
+}
+function openMatchPanel() {
+    const panel = document.getElementById('matchPanel');
+    panel.style.display = 'block';
+}
+function closeMatchPanel() {
+    document.getElementById('matchPanel').style.display = 'none';
+}
+
+function addImageMatches(matches, postId) {
+    // Deduplicate by id
+    const existing = new Set(_imageMatches.map(m => m.id));
+    matches.forEach(m => { if (!existing.has(m.id)) _imageMatches.push(m); });
+    renderMatchPanel();
+    // Show badge
+    const badge = document.getElementById('matchBadge');
+    badge.textContent = _imageMatches.length;
+    badge.style.display = 'block';
+}
+
+function renderMatchPanel() {
+    const list = document.getElementById('matchPanelList');
+    if (!_imageMatches.length) {
+        list.innerHTML = '<div style="padding:14px;font-size:12px;color:var(--muted);text-align:center">No matches yet</div>';
+        return;
+    }
+    list.innerHTML = _imageMatches.map(m => `
+        <div class="match-item" onclick="closeMatchPanel();openComments('${m.id}')">
+            ${m.image_url
+                ? `<img class="match-thumb" src="${(window.API_BASE||'')}${m.image_url}" onerror="this.style.display='none'">`
+                : `<div class="match-thumb-placeholder">📦</div>`}
+            <div class="match-info">
+                <div class="match-title">${m.title}</div>
+                <div class="match-sim">${Math.round(m.score * 100)}% match</div>
+            </div>
+        </div>
+    `).join('');
+}
+
+// ── Hook into SSE to receive image_matches events ─────────────────────────────
+// This integrates with the existing SSE listener in app.js
+// Patch the SSE message handler to handle image_matches type
+(function patchSSE() {
+    const _origHandleSSE = window.handleSSEMessage;
+    window.handleSSEMessage = function(data) {
+        if (data.type === 'image_matches') {
+            addImageMatches(data.matches, data.post_id);
+            showToast(`🔍 ${data.matches.length} visual match${data.matches.length>1?'es':''} found for your post!`);
+            return;
+        }
+        if (_origHandleSSE) _origHandleSSE(data);
+    };
+})();
+
+// ── Override upload to use moderated endpoint ──────────────────────────────────
+// When creating a post with an image, use /upload/image instead of /upload
+// This is handled automatically — existing uploadImage calls go to /upload/image
+window._uploadImageModerated = async function(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const API = window.API_BASE || '';
+    const token = App.token || localStorage.getItem('token');
+    const res = await fetch(`${API}/upload/image`, {
+        method: 'POST', body: form,
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    if (res.status === 422) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Image rejected: inappropriate content');
+    }
+    if (!res.ok) throw new Error('Upload failed');
+    return await res.json(); // { url }
+};
