@@ -194,6 +194,92 @@ const sb = (() => {
     }
     async function getModLogs() { return api('/admin/log') || []; }
 
+    /**
+     * F-A: Auto-fill post form from photo using Florence-2.
+     * Returns {title, description, category}
+     */
+    async function describeImage(file) {
+        const form = new FormData();
+        form.append('file', file);
+        try {
+            const r = await fetch(`${API_URL}/ai/describe-image`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${_token}` },
+                body: form,
+            });
+            if (!r.ok) return null;
+            return await r.json();
+        } catch(e) { return null; }
+    }
+
+    /**
+     * F-B: Natural language search.
+     * Returns array of post objects.
+     */
+    async function aiSearch(query) {
+        const r = await api(`/ai/search?q=${encodeURIComponent(query)}`);
+        return Array.isArray(r) ? r : [];
+    }
+
+    /**
+     * F-C: Camera search — send a frame, get top 5 similar posts.
+     */
+    async function cameraSearch(blob, statusFilter = 'all') {
+        const form = new FormData();
+        form.append('file', blob, 'frame.jpg');
+        try {
+            const r = await fetch(`${API_URL}/ai/camera-search?status_filter=${encodeURIComponent(statusFilter)}`, {
+                method: 'POST',
+                body: form,
+            });
+            if (!r.ok) return [];
+            return await r.json();
+        } catch(e) { return []; }
+    }
+
+    /**
+     * F-D: Check if image looks like an ID card (for admin requests).
+     * Returns {is_id, confidence, scores}
+     */
+    async function checkIdImage(file) {
+        const form = new FormData();
+        form.append('file', file);
+        try {
+            const r = await fetch(`${API_URL}/ai/check-id`, {
+                method: 'POST',
+                body: form,
+            });
+            if (!r.ok) return null;
+            return await r.json();
+        } catch(e) { return null; }
+    }
+
+    /**
+     * Upload with full pipeline (NSFW + DINOv2 + SigLIP2 embeddings).
+     */
+    async function uploadImageFull(dataUrl) {
+        const [meta, b64] = dataUrl.split(',');
+        const mime = meta.match(/:(.*?);/)[1];
+        const ext  = mime.split('/')[1].replace('jpeg','jpg');
+        const bin  = atob(b64);
+        const arr  = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        const form = new FormData();
+        form.append('file', new Blob([arr], {type: mime}), `upload.${ext}`);
+        const r = await fetch(`${API_URL}/upload/checked/v2`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${_token}` },
+            body: form,
+        });
+        if (r.status === 422) {
+            const err = await r.json().catch(() => ({}));
+            throw new Error(err.detail || 'Image rejected: inappropriate content');
+        }
+        if (!r.ok) throw new Error('Upload failed');
+        const data = await r.json();
+        return { url: data.url, fullUrl: `${API_URL}${data.url}` };
+    }
+
     // Keep old name as alias for boot sequence
     async function sendMagicLink()      { return null; }
 
@@ -265,7 +351,8 @@ const sb = (() => {
         getProfileStats, getPostsByUser, getAllUsers, updateProfile,
         getPosts, createPost, updatePost, deletePost,
         getComments, createComment, uploadImage,
-        uploadImageChecked, createPostAI, searchByImage,
+        uploadImageChecked, uploadImageFull, createPostAI, searchByImage,
+        describeImage, aiSearch, cameraSearch, checkIdImage,
         getStats, setRole, banUser, unbanUser,
         getConversations, getDMThread, sendDM, getUnreadCount, getPostsSince,
         deleteComment, editComment, reportComment, voteComment,
