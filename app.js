@@ -1261,6 +1261,10 @@ document.addEventListener('paste', e => {
 // ── SUBMIT POST ───────────────────────────────────────────────────────────────
 async function submitPost() {
     if (!App.isLoggedIn) return;
+    // reset previous auto-match results for this new post
+    _matches = [];
+    updateMatchDot();
+    closeMatchPanel();
     const title    = document.getElementById('postTitle').value.trim();
     const desc     = document.getElementById('postDesc').value.trim();
     const location = document.getElementById('postLocation').value;
@@ -1752,8 +1756,14 @@ function onLogoClick() {
     if (_matches.length) {
         const panel = document.getElementById('matchPanel');
         const isOpen = panel.style.display !== 'none';
-        if (isOpen) closeMatchPanel();
-        else openMatchPanel();
+        if (isOpen) {
+            closeMatchPanel();
+        } else {
+            openMatchPanel();
+            // hide the dot as soon as user opens the panel
+            _matches = [];
+            updateMatchDot();
+        }
     } else {
         goHome();
     }
