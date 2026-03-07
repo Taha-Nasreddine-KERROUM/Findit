@@ -236,8 +236,9 @@ function setUser(me) {
     };
     App.isAdmin      = ['admin','super_admin'].includes(p.role);
     App.isSuperAdmin = p.role === 'super_admin';
-    // Connect DM SSE for this user
+    // Connect DM SSE + user SSE for this user
     connectDMSSE(p.uid);
+    connectUserSSE(p.uid);
 }
 
 // ── RENDER ENGINE ─────────────────────────────────────────────────────────────
@@ -1766,22 +1767,58 @@ function closeMatchPanel() {
 }
 function renderMatchPanel() {
     const list = document.getElementById('matchPanelList');
-    list.innerHTML = _matches.map(m => `
-        <div class="match-item" onclick="closeMatchPanel();scrollToPost('${m.id}')">
-            ${m.image_url
-                ? `<img class="match-thumb" src="${sb.API_BASE}${m.image_url}" loading="lazy">`
+    if (!_matches.length) {
+        list.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:var(--muted)">No matches yet</div>';
+        return;
+    }
+    list.innerHTML = _matches.map(m => {
+        // image_url from SSE is a server-relative path like /images/abc.jpg
+        const imgSrc = m.image_url
+            ? (m.image_url.startsWith('http') ? m.image_url : sb.API_BASE + m.image_url)
+            : null;
+        return `
+        <div class="match-item" onclick="closeMatchPanel();goToMatchPost('${m.id}')">
+            ${imgSrc
+                ? `<img class="match-thumb" src="${imgSrc}" loading="lazy">`
                 : `<div class="match-thumb-empty">📦</div>`}
             <div style="flex:1;min-width:0">
                 <div class="match-title">${escHtml(m.title||'')}</div>
                 <div class="match-score">${Math.round((m.score||0)*100)}% visual match</div>
             </div>
-        </div>`).join('');
+        </div>`;
+    }).join('');
+}
+
+function goToMatchPost(postId) {
+    // If post is already in POSTS array, scroll to it
+    // Otherwise reload all posts first then scroll
+    const exists = POSTS.find(p => p.id === postId);
+    if (exists) {
+        scrollToPost(postId);
+    } else {
+        sb.getPosts().then(rows => {
+            POSTS = (rows || []).filter(r => !r.is_deleted).map(mapRow);
+            setImageSearchMode(null);
+            renderFeed();
+            setTimeout(() => scrollToPost(postId), 120);
+        });
+    }
 }
 function addMatches(newMatches) {
     const seen = new Set(_matches.map(m => m.id));
     newMatches.forEach(m => { if (!seen.has(m.id)) _matches.push(m); });
-    // show red dot on logo
-    document.getElementById('matchDot').style.display = _matches.length ? '' : 'none';
+    updateMatchDot();
+}
+
+function updateMatchDot() {
+    const dot = document.getElementById('matchDot');
+    if (!dot) return;
+    if (_matches.length) {
+        dot.textContent = _matches.length;
+        dot.style.display = '';
+    } else {
+        dot.style.display = 'none';
+    }
 }
 
 // ── Hook SSE: listen for image_matches events ─────────────────────────────────
@@ -1806,11 +1843,4 @@ function connectUserSSE(uid) {
     };
 }
 
-// Patch setUser to also connect the user SSE channel
-const _origSetUser = setUser;
-// eslint-disable-next-line no-global-assign
-setUser = function(me) {
-    _origSetUser(me);
-    const uid = (me.profile || me).uid;
-    if (uid) connectUserSSE(uid);
-};
+// connectUserSSE is now called directly inside setUser()
