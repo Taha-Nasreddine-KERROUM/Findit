@@ -2034,61 +2034,62 @@ async function _doScan() {
     const video = document.getElementById('cameraFeed');
     if (!video || video.readyState < 2) return;
 
+    // capture FULL frame — no cropping
     const canvas = document.createElement('canvas');
     canvas.width  = video.videoWidth  || 640;
     canvas.height = video.videoHeight || 480;
     canvas.getContext('2d').drawImage(video, 0, 0);
 
-    // crop to centre square (what's in the scan ring)
-    const size = Math.min(canvas.width, canvas.height) * 0.7;
-    const cx   = (canvas.width  - size) / 2;
-    const cy   = (canvas.height - size) / 2;
-    const crop = document.createElement('canvas');
-    crop.width  = 224; crop.height = 224;
-    crop.getContext('2d').drawImage(canvas, cx, cy, size, size, 0, 0, 224, 224);
-
-    crop.toBlob(async frameBlob => {
+    canvas.toBlob(async frameBlob => {
         if (!frameBlob) return;
         const statusEl = document.getElementById('cameraStatus');
         if (statusEl) statusEl.textContent = 'Scanning…';
 
         let results = [];
+        let hint    = '';
 
         if (_cameraRefBlob) {
-            // mode A: image-to-image — compare frame against posts using SigLIP2
-            // also compare reference image against frame similarity as a bonus
+            // Mode A — reference image uploaded: visual match frame against posts
             results = await sb.cameraSearch(frameBlob, 'all');
+
         } else if (_cameraQueryText) {
-            // mode B: text query — use AI search + show results that have images
-            // we search by text context but sort by whether the frame matches
-            const aiResults = await sb.aiSearch(_cameraQueryText);
-            // score each result image against the frame
-            const scored = [];
-            for (const p of (aiResults || []).slice(0, 15)) {
-                scored.push({ ...p, similarity: 0.5 }); // flat score for text matches
-            }
-            results = scored.slice(0, 5);
+            // Mode B — text description: search posts by text, then also do
+            // visual scan of the frame to get a scene hint from Florence-2
+            const [aiResults, sceneData] = await Promise.all([
+                sb.aiSearch(_cameraQueryText),
+                sb.describeFrameScene(frameBlob),
+            ]);
+            results = (aiResults || []).slice(0, 5).map(p => ({ ...p, similarity: null }));
+            hint    = sceneData?.hint || '';
         }
 
-        _renderCameraResults(results);
+        _renderCameraResults(results, hint);
 
-        if (statusEl) statusEl.textContent = results.length
-            ? `${results.length} match${results.length > 1 ? 'es' : ''} — point steadily`
-            : 'No matches yet — keep scanning…';
+        if (statusEl) {
+            if (hint) statusEl.textContent = `📍 ${hint}`;
+            else if (results.length) statusEl.textContent = `${results.length} match${results.length > 1 ? 'es' : ''} — point steadily`;
+            else statusEl.textContent = 'No matches yet — keep scanning…';
+        }
 
     }, 'image/jpeg', 0.85);
 }
 
-function _renderCameraResults(results) {
+function _renderCameraResults(results, hint) {
     const el = document.getElementById('cameraResults');
-    if (!results.length) { el.innerHTML = ''; return; }
+    if (!results || !results.length) {
+        el.innerHTML = hint
+            ? `<div style="font-size:12px;color:rgba(255,255,255,.7);padding:8px 0">📍 ${escHtml(hint)}</div>`
+            : '';
+        return;
+    }
     el.innerHTML = `
+        ${hint ? `<div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:8px">📍 ${escHtml(hint)}</div>` : ''}
         <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">
         ${results.map(r => {
             const imgSrc = r.image_url
                 ? (r.image_url.startsWith('http') ? r.image_url : sb.API_BASE + r.image_url)
                 : null;
-            const pct = r.similarity ? Math.round(r.similarity * 100) + '% match' : 'Text match';
+            const pct = r.similarity != null ? Math.round(r.similarity * 100) + '% match' : 'Text match';
             return `
             <div onclick="closeCameraSearch();scrollToPost('${r.id}')"
                  style="flex-shrink:0;width:130px;background:rgba(255,255,255,.1);backdrop-filter:blur(10px);
@@ -2104,6 +2105,8 @@ function _renderCameraResults(results) {
         }).join('')}
         </div>`;
 }
+
+
 
 
 // ══════════════════════════════════════════════════════════════════════════════
