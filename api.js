@@ -195,6 +195,26 @@ const sb = (() => {
     async function getModLogs() { return api('/admin/log') || []; }
 
     /**
+     * F-C: Real-world object finder.
+     * Sends a camera frame + target (text or ref image) to Florence-2.
+     * Returns { found, message, confidence }
+     */
+    async function findItemInFrame(frameBlob, refImageFile, targetText) {
+        const form = new FormData();
+        form.append('frame', frameBlob, 'frame.jpg');
+        if (refImageFile) form.append('ref_image', refImageFile, 'ref.jpg');
+        form.append('target', targetText || '');
+        try {
+            const r = await fetch(`${API_URL}/ai/find-in-frame`, {
+                method: 'POST',
+                body: form,
+            });
+            if (!r.ok) return null;
+            return await r.json();
+        } catch(e) { return null; }
+    }
+
+    /**
      * F-C: Describe a camera frame scene for spatial hints
      * Returns {hint: "near a blue chair on the left"}
      */
@@ -369,7 +389,7 @@ const sb = (() => {
         getPosts, createPost, updatePost, deletePost,
         getComments, createComment, uploadImage,
         uploadImageChecked, uploadImageFull, createPostAI, searchByImage,
-        describeImage, describeFrameScene, aiSearch, cameraSearch, checkIdImage,
+        findItemInFrame, describeImage, describeFrameScene, aiSearch, cameraSearch, checkIdImage,
         getStats, setRole, banUser, unbanUser,
         getConversations, getDMThread, sendDM, getUnreadCount, getPostsSince,
         deleteComment, editComment, reportComment, voteComment,
