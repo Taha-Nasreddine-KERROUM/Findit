@@ -398,16 +398,8 @@ function initSearch() {
             return;
         }
 
-        // Short query (1-2 words) → normal instant filter, no AI
-        if (q.split(' ').length <= 2 && q.length <= 15) {
-            exitAiSearch();
-            App.searchQuery = q;
-            renderFeed();
-            return;
-        }
-
-        // Longer query → AI search after 800ms pause
-        _aiSearchTimer = setTimeout(() => runAiSearch(q), 800);
+        // Any query → semantic AI search after 600ms pause
+        _aiSearchTimer = setTimeout(() => runAiSearch(q), 600);
     });
 
     // Also trigger on Enter immediately
@@ -1954,19 +1946,25 @@ async function triggerAutoFill() {
 
 async function runAiSearch(query) {
     _aiSearchActive = true;
-    App.searchQuery = ''; // prevent normal renderFeed from also filtering
+    App.searchQuery = '';
     const chip = document.getElementById('chipAiSearch');
     if (chip) { chip.style.display = ''; chip.classList.add('active'); }
 
-    // show loading state in feed
     const feed = document.getElementById('feed');
+    const empty = document.getElementById('emptyState');
     if (feed) feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">✨ Searching…</div>';
 
     const raw = await sb.aiSearch(query);
-    if (!_aiSearchActive) return; // user cleared search while waiting
+    if (!_aiSearchActive) return;
 
-    const cards = (raw || []).map(mapRow);
-    setImageSearchMode(cards.length ? cards : null);
+    const cards = (raw || []).map(r => {
+        const card = mapRow(r);
+        card._similarity = r.similarity || null;
+        return card;
+    });
+    // Always enter image-search mode (even empty) so we don't fall back to all posts
+    _imgSearchResults = cards;
+    renderFeed();
     if (!cards.length) showToast('No results found — try different words');
 }
 
