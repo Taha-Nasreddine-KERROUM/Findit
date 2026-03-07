@@ -1944,25 +1944,28 @@ function exitAiSearch() {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-// ── F-C: LIVE CAMERA SEARCH ───────────────────────────────────────────────────
+// ── F-C: LIVE CAMERA FINDER ───────────────────────────────────────────────────
+// Purpose: user describes their lost item (text or photo), opens camera,
+//          walks around — AI watches every frame and says WHERE the item is.
+//          Nothing to do with posts. Pure real-world object finder.
 // ══════════════════════════════════════════════════════════════════════════════
 let _cameraStream    = null;
 let _cameraTimer     = null;
 let _cameraScanning  = false;
-let _cameraRefBlob   = null;   // reference image uploaded by user
-let _cameraQueryText = '';     // text description typed by user
+let _cameraRefBlob   = null;   // reference photo of the item
+let _cameraQueryText = '';     // text description of the item
+let _cameraLastFound = false;  // was item detected in last scan?
 
 function openCameraSearch() {
-    // show setup screen first
     document.getElementById('cameraOverlay').style.display = 'flex';
     document.getElementById('cameraSetup').style.display   = 'flex';
-    document.getElementById('cameraTopBar').style.display  = 'none';
-    document.getElementById('cameraStatus').style.display  = 'none';
-    document.getElementById('cameraRefPreview').style.display    = 'none';
+    document.getElementById('cameraLive').style.display    = 'none';
+    document.getElementById('cameraRefPreview').style.display     = 'none';
     document.getElementById('cameraRefPlaceholder').style.display = '';
     document.getElementById('cameraQueryText').value = '';
-    document.getElementById('cameraQueryLabel').textContent = '';
-    _cameraRefBlob = null;
+    document.getElementById('cameraRefArea').style.borderColor = '';
+    _cameraRefBlob  = null;
+    _cameraLastFound = false;
     document.body.style.overflow = 'hidden';
 }
 
@@ -1970,11 +1973,10 @@ function handleCameraRefImage(file) {
     if (!file) return;
     _cameraRefBlob = file;
     const url = URL.createObjectURL(file);
-    document.getElementById('cameraRefPreview').src = url;
-    document.getElementById('cameraRefPreview').style.display = '';
+    document.getElementById('cameraRefPreview').src     = url;
+    document.getElementById('cameraRefPreview').style.display     = '';
     document.getElementById('cameraRefPlaceholder').style.display = 'none';
-    // highlight the area
-    document.getElementById('cameraRefArea').style.borderColor = 'rgba(91,141,255,.6)';
+    document.getElementById('cameraRefArea').style.borderColor    = 'rgba(91,141,255,.6)';
 }
 
 async function startCameraWithContext() {
@@ -1984,49 +1986,55 @@ async function startCameraWithContext() {
         return;
     }
 
-    // hide setup, show camera
-    document.getElementById('cameraSetup').style.display  = 'none';
-    document.getElementById('cameraTopBar').style.display = 'flex';
-    document.getElementById('cameraStatus').style.display = '';
+    // switch to live view
+    document.getElementById('cameraSetup').style.display = 'none';
+    document.getElementById('cameraLive').style.display  = 'flex';
 
-    // show context label
-    const label = _cameraQueryText || (_cameraRefBlob ? '📷 Reference image' : '');
-    document.getElementById('cameraQueryLabel').textContent = label;
+    // show what we're looking for
+    const label = _cameraQueryText || '📷 Reference photo';
+    document.getElementById('cameraTargetLabel').textContent = `Looking for: ${label}`;
+    _setCameraStatus('idle', 'Point camera around the room…');
 
     try {
         _cameraStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment', width: 640, height: 480 }
+            video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
         });
         document.getElementById('cameraFeed').srcObject = _cameraStream;
-        _startCameraScanning();
+        _cameraScanning = true;
+        _cameraTimer = setInterval(_doScan, 3000);
     } catch(e) {
-        showToast('Camera access denied');
+        showToast('Camera access denied — please allow camera permission');
         closeCameraSearch();
     }
 }
 
 function closeCameraSearch() {
-    _stopCameraScanning();
+    _cameraScanning = false;
+    clearInterval(_cameraTimer);
+    _cameraTimer = null;
     if (_cameraStream) {
         _cameraStream.getTracks().forEach(t => t.stop());
         _cameraStream = null;
     }
-    document.getElementById('cameraOverlay').style.display  = 'none';
-    document.getElementById('cameraResults').innerHTML      = '';
+    document.getElementById('cameraOverlay').style.display = 'none';
     document.body.style.overflow = '';
     _cameraRefBlob   = null;
     _cameraQueryText = '';
+    _cameraLastFound = false;
 }
 
-function _startCameraScanning() {
-    _cameraScanning = true;
-    _cameraTimer = setInterval(_doScan, 2500);
-}
-
-function _stopCameraScanning() {
-    _cameraScanning = false;
-    clearInterval(_cameraTimer);
-    _cameraTimer = null;
+function _setCameraStatus(state, text) {
+    // state: 'idle' | 'scanning' | 'found' | 'notfound'
+    const bar    = document.getElementById('cameraStatusBar');
+    const label  = document.getElementById('cameraStatusText');
+    const colors = {
+        idle:     'rgba(0,0,0,.55)',
+        scanning: 'rgba(91,141,255,.7)',
+        found:    'rgba(34,201,122,.8)',
+        notfound: 'rgba(0,0,0,.55)',
+    };
+    bar.style.background  = colors[state] || colors.idle;
+    label.textContent = text;
 }
 
 async function _doScan() {
@@ -2034,76 +2042,57 @@ async function _doScan() {
     const video = document.getElementById('cameraFeed');
     if (!video || video.readyState < 2) return;
 
-    // capture FULL frame — no cropping
-    const canvas = document.createElement('canvas');
-    canvas.width  = video.videoWidth  || 640;
-    canvas.height = video.videoHeight || 480;
+    _setCameraStatus('scanning', '🔍 Analysing frame…');
+
+    // capture full frame
+    const canvas  = document.createElement('canvas');
+    canvas.width  = video.videoWidth  || 1280;
+    canvas.height = video.videoHeight || 720;
     canvas.getContext('2d').drawImage(video, 0, 0);
 
     canvas.toBlob(async frameBlob => {
-        if (!frameBlob) return;
-        const statusEl = document.getElementById('cameraStatus');
-        if (statusEl) statusEl.textContent = 'Scanning…';
+        if (!frameBlob || !_cameraScanning) return;
 
-        let results = [];
-        let hint    = '';
+        // build the target description
+        let targetDesc = _cameraQueryText;
+        if (!targetDesc && _cameraRefBlob) targetDesc = '__ref_image__';
 
-        if (_cameraRefBlob) {
-            // Mode A — reference image uploaded: visual match frame against posts
-            results = await sb.cameraSearch(frameBlob, 'all');
+        const result = await sb.findItemInFrame(frameBlob, _cameraRefBlob, targetDesc);
 
-        } else if (_cameraQueryText) {
-            // Mode B — text description: search posts by text, then also do
-            // visual scan of the frame to get a scene hint from Florence-2
-            const [aiResults, sceneData] = await Promise.all([
-                sb.aiSearch(_cameraQueryText),
-                sb.describeFrameScene(frameBlob),
-            ]);
-            results = (aiResults || []).slice(0, 5).map(p => ({ ...p, similarity: null }));
-            hint    = sceneData?.hint || '';
+        if (!result) {
+            _setCameraStatus('notfound', 'Nothing detected yet — keep moving…');
+            _clearCameraOverlay();
+            return;
         }
 
-        _renderCameraResults(results, hint);
-
-        if (statusEl) {
-            if (hint) statusEl.textContent = `📍 ${hint}`;
-            else if (results.length) statusEl.textContent = `${results.length} match${results.length > 1 ? 'es' : ''} — point steadily`;
-            else statusEl.textContent = 'No matches yet — keep scanning…';
+        if (result.found) {
+            _cameraLastFound = true;
+            _setCameraStatus('found', `✅ ${result.message}`);
+            _showCameraOverlay(result.message, result.confidence);
+            // pulse the border green
+            document.getElementById('cameraLiveBorder').style.borderColor = 'rgba(34,201,122,.8)';
+            setTimeout(() => {
+                if (document.getElementById('cameraLiveBorder'))
+                    document.getElementById('cameraLiveBorder').style.borderColor = 'rgba(255,255,255,.15)';
+            }, 2000);
+        } else {
+            _cameraLastFound = false;
+            _setCameraStatus('notfound', result.message || 'Not visible here — keep looking…');
+            _clearCameraOverlay();
         }
-
-    }, 'image/jpeg', 0.85);
+    }, 'image/jpeg', 0.88);
 }
 
-function _renderCameraResults(results, hint) {
-    const el = document.getElementById('cameraResults');
-    if (!results || !results.length) {
-        el.innerHTML = hint
-            ? `<div style="font-size:12px;color:rgba(255,255,255,.7);padding:8px 0">📍 ${escHtml(hint)}</div>`
-            : '';
-        return;
-    }
-    el.innerHTML = `
-        ${hint ? `<div style="font-size:12px;color:rgba(255,255,255,.7);margin-bottom:8px">📍 ${escHtml(hint)}</div>` : ''}
-        <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">
-        ${results.map(r => {
-            const imgSrc = r.image_url
-                ? (r.image_url.startsWith('http') ? r.image_url : sb.API_BASE + r.image_url)
-                : null;
-            const pct = r.similarity != null ? Math.round(r.similarity * 100) + '% match' : 'Text match';
-            return `
-            <div onclick="closeCameraSearch();scrollToPost('${r.id}')"
-                 style="flex-shrink:0;width:130px;background:rgba(255,255,255,.1);backdrop-filter:blur(10px);
-                        border-radius:12px;overflow:hidden;cursor:pointer;border:1px solid rgba(255,255,255,.15)">
-                ${imgSrc
-                    ? `<img src="${imgSrc}" style="width:100%;height:80px;object-fit:cover">`
-                    : `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;font-size:28px">📦</div>`}
-                <div style="padding:7px 8px">
-                    <div style="font-size:11px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(r.title||'')}</div>
-                    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px">${pct}</div>
-                </div>
-            </div>`;
-        }).join('')}
-        </div>`;
+function _showCameraOverlay(message, confidence) {
+    const el = document.getElementById('cameraFoundOverlay');
+    el.style.display = 'flex';
+    document.getElementById('cameraFoundMsg').textContent  = message;
+    document.getElementById('cameraFoundConf').textContent =
+        confidence ? `${Math.round(confidence * 100)}% confident` : '';
+}
+
+function _clearCameraOverlay() {
+    document.getElementById('cameraFoundOverlay').style.display = 'none';
 }
 
 
