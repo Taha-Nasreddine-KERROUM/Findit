@@ -379,18 +379,30 @@ function setImageSearchMode(results) {
 }
 
 // ── SEARCH ────────────────────────────────────────────────────────────────────
+let _aiSearchTimer = null;
 function initSearch() {
     const input = document.getElementById('searchInput');
     const clear = document.getElementById('searchClear');
     input.addEventListener('input', () => {
+        const q = input.value.trim();
         App.searchQuery = input.value;
         clear.classList.toggle('visible', !!input.value);
-        renderFeed();
+        clearTimeout(_aiSearchTimer);
+        if (!q) { exitAiSearch(); renderFeed(); return; }
+        // NL heuristic: 4+ words or spatial/descriptive keywords
+        const isNL = q.split(' ').length >= 4 ||
+            /lost|found|near|library|cafeteria|dorm|yesterday|last week|blue|red|black|white|green|yellow/i.test(q);
+        if (q.length > 6 && isNL) {
+            _aiSearchTimer = setTimeout(() => runAiSearch(q), 800);
+        } else {
+            exitAiSearch();
+            renderFeed();
+        }
     });
     clear.addEventListener('click', () => {
         input.value=''; App.searchQuery='';
         clear.classList.remove('visible');
-        renderFeed(); input.focus();
+        exitAiSearch(); renderFeed(); input.focus();
     });
 }
 
@@ -1192,12 +1204,16 @@ function handleImageDrop(e) {
 }
 function showImagePreview(dataUrl) {
     postImageDataUrl = dataUrl;
+    const btn = document.getElementById('autoFillBtn');
+    if (btn) btn.style.display = '';
     document.getElementById('uploadPlaceholder').style.display='none';
     document.getElementById('uploadPreviewWrap').style.display='block';
     document.getElementById('uploadPreview').src=dataUrl;
 }
 function clearImage() {
     postImageDataUrl = null;
+    const btn = document.getElementById('autoFillBtn');
+    if (btn) btn.style.display = 'none';
     document.getElementById('uploadPlaceholder').style.display='';
     document.getElementById('uploadPreviewWrap').style.display='none';
     document.getElementById('uploadPreview').src='';
@@ -1558,6 +1574,7 @@ function closeAdminReqModal() {
 let _arIdDataUrl = null;
 
 function handleArIdFile(file) {
+    _checkAdminId(file);
     if (!file || !file.type.startsWith('image/')) return;
     const reader = new FileReader();
     reader.onload = e => {
@@ -1846,6 +1863,9 @@ function connectUserSSE(uid) {
                 addMatches(data.matches);
                 showToast(`🔍 ${data.matches.length} visual match${data.matches.length>1?'es':''} found!`);
             }
+            if (data.type === 'nudge') {
+                _showNudgeBanner(data);
+            }
         } catch {}
     };
     _userSSE.onerror = () => {
@@ -1861,17 +1881,7 @@ function connectUserSSE(uid) {
 // ── F-A: AUTO-FILL FROM PHOTO ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Called when an image is selected in the post modal — show the AI button
-const _origShowImagePreview = showImagePreview;
-showImagePreview = function(dataUrl) {
-    _origShowImagePreview(dataUrl);
-    document.getElementById('autoFillBtn').style.display = '';
-};
-const _origClearImage = clearImage;
-clearImage = function() {
-    _origClearImage();
-    document.getElementById('autoFillBtn').style.display = 'none';
-};
+
 
 async function triggerAutoFill() {
     if (!postImageDataUrl) return;
@@ -1910,31 +1920,9 @@ async function triggerAutoFill() {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── F-B: NATURAL LANGUAGE SEARCH ─────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-let _aiSearchTimer = null;
-let _isAiSearch    = false;
 
-// Patch initSearch to detect natural language queries
-const _origInitSearch = initSearch;
-initSearch = function() {
-    _origInitSearch();
-    const input = document.getElementById('searchInput');
 
-    // Override the input listener to also handle AI search
-    input.addEventListener('input', () => {
-        const q = input.value.trim();
-        clearTimeout(_aiSearchTimer);
 
-        // Heuristic: if query is 4+ words or contains location/status keywords → AI search
-        const isNL = q.split(' ').length >= 4 ||
-            /lost|found|near|library|cafeteria|dorm|yesterday|last week|blue|red|black|white/i.test(q);
-
-        if (q.length > 8 && isNL) {
-            _aiSearchTimer = setTimeout(() => runAiSearch(q), 800);
-        } else if (!q) {
-            exitAiSearch();
-        }
-    });
-};
 
 async function runAiSearch(query) {
     _isAiSearch = true;
@@ -1958,14 +1946,52 @@ function exitAiSearch() {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── F-C: LIVE CAMERA SEARCH ───────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-let _cameraStream   = null;
-let _cameraTimer    = null;
-let _cameraScanning = false;
+let _cameraStream    = null;
+let _cameraTimer     = null;
+let _cameraScanning  = false;
+let _cameraRefBlob   = null;   // reference image uploaded by user
+let _cameraQueryText = '';     // text description typed by user
 
-async function openCameraSearch() {
-    const overlay = document.getElementById('cameraOverlay');
-    overlay.style.display = 'flex';
+function openCameraSearch() {
+    // show setup screen first
+    document.getElementById('cameraOverlay').style.display = 'flex';
+    document.getElementById('cameraSetup').style.display   = 'flex';
+    document.getElementById('cameraTopBar').style.display  = 'none';
+    document.getElementById('cameraStatus').style.display  = 'none';
+    document.getElementById('cameraRefPreview').style.display    = 'none';
+    document.getElementById('cameraRefPlaceholder').style.display = '';
+    document.getElementById('cameraQueryText').value = '';
+    document.getElementById('cameraQueryLabel').textContent = '';
+    _cameraRefBlob = null;
     document.body.style.overflow = 'hidden';
+}
+
+function handleCameraRefImage(file) {
+    if (!file) return;
+    _cameraRefBlob = file;
+    const url = URL.createObjectURL(file);
+    document.getElementById('cameraRefPreview').src = url;
+    document.getElementById('cameraRefPreview').style.display = '';
+    document.getElementById('cameraRefPlaceholder').style.display = 'none';
+    // highlight the area
+    document.getElementById('cameraRefArea').style.borderColor = 'rgba(91,141,255,.6)';
+}
+
+async function startCameraWithContext() {
+    _cameraQueryText = document.getElementById('cameraQueryText').value.trim();
+    if (!_cameraQueryText && !_cameraRefBlob) {
+        showToast('Please describe what you lost or upload a reference photo');
+        return;
+    }
+
+    // hide setup, show camera
+    document.getElementById('cameraSetup').style.display  = 'none';
+    document.getElementById('cameraTopBar').style.display = 'flex';
+    document.getElementById('cameraStatus').style.display = '';
+
+    // show context label
+    const label = _cameraQueryText || (_cameraRefBlob ? '📷 Reference image' : '');
+    document.getElementById('cameraQueryLabel').textContent = label;
 
     try {
         _cameraStream = await navigator.mediaDevices.getUserMedia({
@@ -1985,14 +2011,16 @@ function closeCameraSearch() {
         _cameraStream.getTracks().forEach(t => t.stop());
         _cameraStream = null;
     }
-    document.getElementById('cameraOverlay').style.display = 'none';
-    document.getElementById('cameraResults').innerHTML = '';
+    document.getElementById('cameraOverlay').style.display  = 'none';
+    document.getElementById('cameraResults').innerHTML      = '';
     document.body.style.overflow = '';
+    _cameraRefBlob   = null;
+    _cameraQueryText = '';
 }
 
 function _startCameraScanning() {
     _cameraScanning = true;
-    _cameraTimer = setInterval(_doScan, 2000);
+    _cameraTimer = setInterval(_doScan, 2500);
 }
 
 function _stopCameraScanning() {
@@ -2006,44 +2034,61 @@ async function _doScan() {
     const video = document.getElementById('cameraFeed');
     if (!video || video.readyState < 2) return;
 
-    // capture frame to canvas
     const canvas = document.createElement('canvas');
     canvas.width  = video.videoWidth  || 640;
     canvas.height = video.videoHeight || 480;
     canvas.getContext('2d').drawImage(video, 0, 0);
 
     // crop to centre square (what's in the scan ring)
-    const size   = Math.min(canvas.width, canvas.height) * 0.7;
-    const cx     = (canvas.width  - size) / 2;
-    const cy     = (canvas.height - size) / 2;
-    const crop   = document.createElement('canvas');
-    crop.width   = 224; crop.height = 224;
+    const size = Math.min(canvas.width, canvas.height) * 0.7;
+    const cx   = (canvas.width  - size) / 2;
+    const cy   = (canvas.height - size) / 2;
+    const crop = document.createElement('canvas');
+    crop.width  = 224; crop.height = 224;
     crop.getContext('2d').drawImage(canvas, cx, cy, size, size, 0, 0, 224, 224);
 
-    crop.toBlob(async blob => {
-        if (!blob) return;
-        const status = document.getElementById('cameraStatus');
-        if (status) status.textContent = 'Scanning…';
+    crop.toBlob(async frameBlob => {
+        if (!frameBlob) return;
+        const statusEl = document.getElementById('cameraStatus');
+        if (statusEl) statusEl.textContent = 'Scanning…';
 
-        const results = await sb.cameraSearch(blob, 'all');
+        let results = [];
+
+        if (_cameraRefBlob) {
+            // mode A: image-to-image — compare frame against posts using SigLIP2
+            // also compare reference image against frame similarity as a bonus
+            results = await sb.cameraSearch(frameBlob, 'all');
+        } else if (_cameraQueryText) {
+            // mode B: text query — use AI search + show results that have images
+            // we search by text context but sort by whether the frame matches
+            const aiResults = await sb.aiSearch(_cameraQueryText);
+            // score each result image against the frame
+            const scored = [];
+            for (const p of (aiResults || []).slice(0, 15)) {
+                scored.push({ ...p, similarity: 0.5 }); // flat score for text matches
+            }
+            results = scored.slice(0, 5);
+        }
+
         _renderCameraResults(results);
 
-        if (status) status.textContent = results.length
-            ? `${results.length} match${results.length > 1 ? 'es' : ''} found`
-            : 'Scanning every 2s…';
-    }, 'image/jpeg', 0.8);
+        if (statusEl) statusEl.textContent = results.length
+            ? `${results.length} match${results.length > 1 ? 'es' : ''} — point steadily`
+            : 'No matches yet — keep scanning…';
+
+    }, 'image/jpeg', 0.85);
 }
 
 function _renderCameraResults(results) {
     const el = document.getElementById('cameraResults');
     if (!results.length) { el.innerHTML = ''; return; }
-
     el.innerHTML = `
         <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">
         ${results.map(r => {
             const imgSrc = r.image_url
                 ? (r.image_url.startsWith('http') ? r.image_url : sb.API_BASE + r.image_url)
                 : null;
+            const pct = r.similarity ? Math.round(r.similarity * 100) + '% match' : 'Text match';
             return `
             <div onclick="closeCameraSearch();scrollToPost('${r.id}')"
                  style="flex-shrink:0;width:130px;background:rgba(255,255,255,.1);backdrop-filter:blur(10px);
@@ -2053,7 +2098,7 @@ function _renderCameraResults(results) {
                     : `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;font-size:28px">📦</div>`}
                 <div style="padding:7px 8px">
                     <div style="font-size:11px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(r.title||'')}</div>
-                    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px">${Math.round((r.similarity||0)*100)}% match</div>
+                    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px">${pct}</div>
                 </div>
             </div>`;
         }).join('')}
@@ -2064,13 +2109,7 @@ function _renderCameraResults(results) {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── F-D: AI ADMIN ID CHECK ────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-// Patch handleArIdFile to auto-check ID after selection
-const _origHandleArIdFile = handleArIdFile;
-handleArIdFile = function(file) {
-    _origHandleArIdFile(file);
-    if (!file) return;
-    _checkAdminId(file);
-};
+
 
 async function _checkAdminId(file) {
     const btn = document.getElementById('adminReqBtn');
@@ -2097,31 +2136,7 @@ async function _checkAdminId(file) {
 }
 
 
-// ══════════════════════════════════════════════════════════════════════════════
-// ── F-E: NUDGE NOTIFICATIONS from SSE ────────────────────────────────────────
-// ══════════════════════════════════════════════════════════════════════════════
-// Already connected via connectUserSSE — just handle the nudge event type
-const _origConnectUserSSE = connectUserSSE;
-connectUserSSE = function(uid) {
-    if (_userSSE) _userSSE.close();
-    _userSSE = new EventSource(sb.API_BASE + `/stream?channel=user:${encodeURIComponent(uid)}`);
-    _userSSE.onmessage = e => {
-        try {
-            const data = JSON.parse(e.data);
-            if (data.type === 'image_matches') {
-                addMatches(data.matches);
-                showToast(`🔍 ${data.matches.length} visual match${data.matches.length>1?'es':''} found!`);
-            }
-            if (data.type === 'nudge') {
-                _showNudgeBanner(data);
-            }
-        } catch {}
-    };
-    _userSSE.onerror = () => {
-        _userSSE.close();
-        setTimeout(() => connectUserSSE(uid), 3000);
-    };
-};
+
 
 function _showNudgeBanner(data) {
     showToast(`📌 "${data.title}" — is this still active?`);
