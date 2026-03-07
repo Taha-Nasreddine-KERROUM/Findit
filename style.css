@@ -577,11 +577,14 @@ button { cursor: pointer; font-family: inherit; }
 }
 .img-search-btn:hover { color: var(--accent); background: rgba(91,141,255,.1); }
 
-/* red dot on logo when there are matches */
+/* number badge on logo when there are matches */
 .match-dot {
-    position: absolute; top: 3px; right: 3px;
-    width: 8px; height: 8px; border-radius: 50%;
+    position: absolute; top: -3px; right: -3px;
+    min-width: 16px; height: 16px; border-radius: 99px;
     background: #e05a5a; border: 1.5px solid var(--bg);
+    color: #fff; font-size: 9px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 3px;
     pointer-events: none;
 }
 .logo-btn { position: relative; }
