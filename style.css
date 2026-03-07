@@ -683,3 +683,27 @@ button { cursor: pointer; font-family: inherit; }
     cursor: pointer;
 }
 .chip-img-search:hover { background: rgba(91,141,255,.28) !important; }
+
+/* camera FAB button */
+.fab-camera {
+    width: 52px; height: 52px; border: none; background: transparent;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.15s;
+}
+.fab-camera:hover { background: rgba(255,255,255,0.08); }
+
+/* scan ring pulse animation */
+@keyframes scanPulse {
+    0%, 100% { opacity: .5; transform: scale(1); }
+    50%       { opacity: 1; transform: scale(1.03); }
+}
+#scanRing { animation: scanPulse 2s ease-in-out infinite; }
+
+/* AI search chip */
+.chip-ai-search {
+    background: rgba(160,132,245,.18) !important;
+    color: #a084f5 !important;
+    border: 1px solid rgba(160,132,245,.35) !important;
+    cursor: pointer;
+}
+.chip-ai-search:hover { background: rgba(160,132,245,.28) !important; }
