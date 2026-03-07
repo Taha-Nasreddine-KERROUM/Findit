@@ -1886,34 +1886,40 @@ function connectUserSSE(uid) {
 async function triggerAutoFill() {
     if (!postImageDataUrl) return;
     const btn = document.getElementById('autoFillBtn');
-    btn.textContent = '⏳ Analysing…'; btn.disabled = true;
+    btn.textContent = '⏳ Analysing image…'; btn.disabled = true;
 
-    // convert dataUrl to File
-    const res  = await fetch(postImageDataUrl);
-    const blob = await res.blob();
-    const file = new File([blob], 'photo.jpg', { type: blob.type });
+    try {
+        // convert dataUrl to blob/file
+        const res  = await fetch(postImageDataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], 'photo.jpg', { type: blob.type || 'image/jpeg' });
 
-    const result = await sb.describeImage(file);
-    btn.textContent = '✨ Auto-fill with AI'; btn.disabled = false;
+        const result = await sb.describeImage(file);
 
-    if (!result) { showToast('Could not analyse image — fill in manually'); return; }
+        if (!result || (!result.title && !result.description)) {
+            showToast('⚠️ Could not analyse image — Florence-2 may still be loading on the server. Try again in 30s.');
+            return;
+        }
 
-    // fill form fields (only if currently empty)
-    const titleEl = document.getElementById('postTitle');
-    const descEl  = document.getElementById('postDesc');
-    const catEl   = document.getElementById('postCategory');
+        const titleEl = document.getElementById('postTitle');
+        const descEl  = document.getElementById('postDesc');
+        const catEl   = document.getElementById('postCategory');
 
-    if (!titleEl.value.trim())    titleEl.value = result.title       || '';
-    if (!descEl.value.trim())     descEl.value  = result.description || '';
+        // Always fill — overwrite so user can see what AI detected
+        if (result.title)       titleEl.value = result.title;
+        if (result.description) descEl.value  = result.description;
+        if (result.category) {
+            const opts  = [...catEl.options];
+            const match = opts.find(o => o.value === result.category || o.text === result.category);
+            if (match) catEl.value = match.value;
+        }
 
-    // match category
-    if (result.category) {
-        const opts = [...catEl.options];
-        const match = opts.find(o => o.value === result.category || o.text === result.category);
-        if (match) catEl.value = match.value;
+        showToast('✨ Form auto-filled! Edit anything that looks wrong.');
+    } catch(e) {
+        showToast('Auto-fill failed: ' + e.message);
+    } finally {
+        btn.textContent = '✨ Auto-fill with AI'; btn.disabled = false;
     }
-
-    showToast('✨ Form auto-filled!');
 }
 
 
@@ -2060,8 +2066,7 @@ async function _doScan() {
         const result = await sb.findItemInFrame(frameBlob, _cameraRefBlob, targetDesc);
 
         if (!result) {
-            _setCameraStatus('notfound', 'Nothing detected yet — keep moving…');
-            _clearCameraOverlay();
+            _setCameraStatus('scanning', 'Analysing… (model loading, ~30s first time)');
             return;
         }
 
@@ -2069,15 +2074,18 @@ async function _doScan() {
             _cameraLastFound = true;
             _setCameraStatus('found', `✅ ${result.message}`);
             _showCameraOverlay(result.message, result.confidence);
-            // pulse the border green
             document.getElementById('cameraLiveBorder').style.borderColor = 'rgba(34,201,122,.8)';
             setTimeout(() => {
                 if (document.getElementById('cameraLiveBorder'))
                     document.getElementById('cameraLiveBorder').style.borderColor = 'rgba(255,255,255,.15)';
-            }, 2000);
+            }, 2500);
         } else {
             _cameraLastFound = false;
-            _setCameraStatus('notfound', result.message || 'Not visible here — keep looking…');
+            // Show what the camera DOES see — helps user understand it's working
+            const seeing = result.caption
+                ? `Not here. Seeing: ${result.caption.slice(0, 80)}…`
+                : (result.message || 'Not visible here — keep looking…');
+            _setCameraStatus('notfound', seeing);
             _clearCameraOverlay();
         }
     }, 'image/jpeg', 0.88);
