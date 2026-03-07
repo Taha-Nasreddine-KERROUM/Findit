@@ -1263,6 +1263,7 @@ async function submitPost() {
     if (!App.isLoggedIn) return;
     // reset previous auto-match results for this new post
     _matches = [];
+    _matchesSeen = false;
     updateMatchDot();
     closeMatchPanel();
     const title    = document.getElementById('postTitle').value.trim();
@@ -1750,7 +1751,8 @@ async function runImgSearch() {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── FEATURE 2: AUTO-MATCH PANEL (logo button) ─────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-let _matches = [];  // accumulated image_matches from SSE
+let _matches = [];       // accumulated image_matches from SSE
+let _matchesSeen = false; // true once user has opened the panel
 
 function onLogoClick() {
     if (_matches.length) {
@@ -1759,10 +1761,9 @@ function onLogoClick() {
         if (isOpen) {
             closeMatchPanel();
         } else {
-            openMatchPanel();
-            // hide the dot as soon as user opens the panel
-            _matches = [];
-            updateMatchDot();
+            openMatchPanel();  // renders the list first
+            _matchesSeen = true;
+            updateMatchDot();  // then hide the dot (matches array stays for display)
         }
     } else {
         goHome();
@@ -1823,7 +1824,7 @@ function addMatches(newMatches) {
 function updateMatchDot() {
     const dot = document.getElementById('matchDot');
     if (!dot) return;
-    if (_matches.length) {
+    if (_matches.length && !_matchesSeen) {
         dot.textContent = _matches.length;
         dot.style.display = '';
     } else {
