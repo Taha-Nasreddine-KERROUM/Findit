@@ -380,27 +380,49 @@ function setImageSearchMode(results) {
 
 // ── SEARCH ────────────────────────────────────────────────────────────────────
 let _aiSearchTimer = null;
+let _aiSearchActive = false;
+
 function initSearch() {
     const input = document.getElementById('searchInput');
     const clear = document.getElementById('searchClear');
+
     input.addEventListener('input', () => {
         const q = input.value.trim();
-        App.searchQuery = input.value;
         clear.classList.toggle('visible', !!input.value);
         clearTimeout(_aiSearchTimer);
-        if (!q) { exitAiSearch(); renderFeed(); return; }
-        // NL heuristic: 4+ words or spatial/descriptive keywords
-        const isNL = q.split(' ').length >= 4 ||
-            /lost|found|near|library|cafeteria|dorm|yesterday|last week|blue|red|black|white|green|yellow/i.test(q);
-        if (q.length > 6 && isNL) {
-            _aiSearchTimer = setTimeout(() => runAiSearch(q), 800);
-        } else {
+
+        if (!q) {
             exitAiSearch();
+            App.searchQuery = '';
             renderFeed();
+            return;
+        }
+
+        // Short query (1-2 words) → normal instant filter, no AI
+        if (q.split(' ').length <= 2 && q.length <= 15) {
+            exitAiSearch();
+            App.searchQuery = q;
+            renderFeed();
+            return;
+        }
+
+        // Longer query → AI search after 800ms pause
+        _aiSearchTimer = setTimeout(() => runAiSearch(q), 800);
+    });
+
+    // Also trigger on Enter immediately
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            const q = input.value.trim();
+            if (q.length > 2) {
+                clearTimeout(_aiSearchTimer);
+                runAiSearch(q);
+            }
         }
     });
+
     clear.addEventListener('click', () => {
-        input.value=''; App.searchQuery='';
+        input.value = ''; App.searchQuery = '';
         clear.classList.remove('visible');
         exitAiSearch(); renderFeed(); input.focus();
     });
@@ -1931,18 +1953,25 @@ async function triggerAutoFill() {
 
 
 async function runAiSearch(query) {
-    _isAiSearch = true;
+    _aiSearchActive = true;
+    App.searchQuery = ''; // prevent normal renderFeed from also filtering
     const chip = document.getElementById('chipAiSearch');
     if (chip) { chip.style.display = ''; chip.classList.add('active'); }
 
+    // show loading state in feed
+    const feed = document.getElementById('feed');
+    if (feed) feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">✨ Searching…</div>';
+
     const raw = await sb.aiSearch(query);
+    if (!_aiSearchActive) return; // user cleared search while waiting
+
     const cards = (raw || []).map(mapRow);
     setImageSearchMode(cards.length ? cards : null);
-    if (!cards.length) showToast('No results for that search');
+    if (!cards.length) showToast('No results found — try different words');
 }
 
 function exitAiSearch() {
-    _isAiSearch = false;
+    _aiSearchActive = false;
     const chip = document.getElementById('chipAiSearch');
     if (chip) { chip.style.display = 'none'; chip.classList.remove('active'); }
     setImageSearchMode(null);
