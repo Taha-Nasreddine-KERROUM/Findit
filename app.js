@@ -1303,7 +1303,7 @@ async function submitPost() {
                 btn.textContent = 'Checking image…'; btn.disabled = true;
                 let uploadRes;
                 try {
-                    uploadRes = await sb.uploadImageChecked(postImageDataUrl);
+                    uploadRes = await sb.uploadImageFull(postImageDataUrl);
                 } catch(e) {
                     btn.textContent = 'Post'; btn.disabled = false;
                     showToast(e.message || 'Image upload failed');
@@ -1855,3 +1855,295 @@ function connectUserSSE(uid) {
 }
 
 // connectUserSSE is now called directly inside setUser()
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── F-A: AUTO-FILL FROM PHOTO ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Called when an image is selected in the post modal — show the AI button
+const _origShowImagePreview = showImagePreview;
+showImagePreview = function(dataUrl) {
+    _origShowImagePreview(dataUrl);
+    document.getElementById('autoFillBtn').style.display = '';
+};
+const _origClearImage = clearImage;
+clearImage = function() {
+    _origClearImage();
+    document.getElementById('autoFillBtn').style.display = 'none';
+};
+
+async function triggerAutoFill() {
+    if (!postImageDataUrl) return;
+    const btn = document.getElementById('autoFillBtn');
+    btn.textContent = '⏳ Analysing…'; btn.disabled = true;
+
+    // convert dataUrl to File
+    const res  = await fetch(postImageDataUrl);
+    const blob = await res.blob();
+    const file = new File([blob], 'photo.jpg', { type: blob.type });
+
+    const result = await sb.describeImage(file);
+    btn.textContent = '✨ Auto-fill with AI'; btn.disabled = false;
+
+    if (!result) { showToast('Could not analyse image — fill in manually'); return; }
+
+    // fill form fields (only if currently empty)
+    const titleEl = document.getElementById('postTitle');
+    const descEl  = document.getElementById('postDesc');
+    const catEl   = document.getElementById('postCategory');
+
+    if (!titleEl.value.trim())    titleEl.value = result.title       || '';
+    if (!descEl.value.trim())     descEl.value  = result.description || '';
+
+    // match category
+    if (result.category) {
+        const opts = [...catEl.options];
+        const match = opts.find(o => o.value === result.category || o.text === result.category);
+        if (match) catEl.value = match.value;
+    }
+
+    showToast('✨ Form auto-filled!');
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── F-B: NATURAL LANGUAGE SEARCH ─────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+let _aiSearchTimer = null;
+let _isAiSearch    = false;
+
+// Patch initSearch to detect natural language queries
+const _origInitSearch = initSearch;
+initSearch = function() {
+    _origInitSearch();
+    const input = document.getElementById('searchInput');
+
+    // Override the input listener to also handle AI search
+    input.addEventListener('input', () => {
+        const q = input.value.trim();
+        clearTimeout(_aiSearchTimer);
+
+        // Heuristic: if query is 4+ words or contains location/status keywords → AI search
+        const isNL = q.split(' ').length >= 4 ||
+            /lost|found|near|library|cafeteria|dorm|yesterday|last week|blue|red|black|white/i.test(q);
+
+        if (q.length > 8 && isNL) {
+            _aiSearchTimer = setTimeout(() => runAiSearch(q), 800);
+        } else if (!q) {
+            exitAiSearch();
+        }
+    });
+};
+
+async function runAiSearch(query) {
+    _isAiSearch = true;
+    const chip = document.getElementById('chipAiSearch');
+    if (chip) { chip.style.display = ''; chip.classList.add('active'); }
+
+    const raw = await sb.aiSearch(query);
+    const cards = (raw || []).map(mapRow);
+    setImageSearchMode(cards.length ? cards : null);
+    if (!cards.length) showToast('No results for that search');
+}
+
+function exitAiSearch() {
+    _isAiSearch = false;
+    const chip = document.getElementById('chipAiSearch');
+    if (chip) { chip.style.display = 'none'; chip.classList.remove('active'); }
+    setImageSearchMode(null);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── F-C: LIVE CAMERA SEARCH ───────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+let _cameraStream   = null;
+let _cameraTimer    = null;
+let _cameraScanning = false;
+
+async function openCameraSearch() {
+    const overlay = document.getElementById('cameraOverlay');
+    overlay.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+
+    try {
+        _cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: 640, height: 480 }
+        });
+        document.getElementById('cameraFeed').srcObject = _cameraStream;
+        _startCameraScanning();
+    } catch(e) {
+        showToast('Camera access denied');
+        closeCameraSearch();
+    }
+}
+
+function closeCameraSearch() {
+    _stopCameraScanning();
+    if (_cameraStream) {
+        _cameraStream.getTracks().forEach(t => t.stop());
+        _cameraStream = null;
+    }
+    document.getElementById('cameraOverlay').style.display = 'none';
+    document.getElementById('cameraResults').innerHTML = '';
+    document.body.style.overflow = '';
+}
+
+function _startCameraScanning() {
+    _cameraScanning = true;
+    _cameraTimer = setInterval(_doScan, 2000);
+}
+
+function _stopCameraScanning() {
+    _cameraScanning = false;
+    clearInterval(_cameraTimer);
+    _cameraTimer = null;
+}
+
+async function _doScan() {
+    if (!_cameraScanning) return;
+    const video = document.getElementById('cameraFeed');
+    if (!video || video.readyState < 2) return;
+
+    // capture frame to canvas
+    const canvas = document.createElement('canvas');
+    canvas.width  = video.videoWidth  || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+
+    // crop to centre square (what's in the scan ring)
+    const size   = Math.min(canvas.width, canvas.height) * 0.7;
+    const cx     = (canvas.width  - size) / 2;
+    const cy     = (canvas.height - size) / 2;
+    const crop   = document.createElement('canvas');
+    crop.width   = 224; crop.height = 224;
+    crop.getContext('2d').drawImage(canvas, cx, cy, size, size, 0, 0, 224, 224);
+
+    crop.toBlob(async blob => {
+        if (!blob) return;
+        const status = document.getElementById('cameraStatus');
+        if (status) status.textContent = 'Scanning…';
+
+        const results = await sb.cameraSearch(blob, 'all');
+        _renderCameraResults(results);
+
+        if (status) status.textContent = results.length
+            ? `${results.length} match${results.length > 1 ? 'es' : ''} found`
+            : 'Scanning every 2s…';
+    }, 'image/jpeg', 0.8);
+}
+
+function _renderCameraResults(results) {
+    const el = document.getElementById('cameraResults');
+    if (!results.length) { el.innerHTML = ''; return; }
+
+    el.innerHTML = `
+        <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px">
+        ${results.map(r => {
+            const imgSrc = r.image_url
+                ? (r.image_url.startsWith('http') ? r.image_url : sb.API_BASE + r.image_url)
+                : null;
+            return `
+            <div onclick="closeCameraSearch();scrollToPost('${r.id}')"
+                 style="flex-shrink:0;width:130px;background:rgba(255,255,255,.1);backdrop-filter:blur(10px);
+                        border-radius:12px;overflow:hidden;cursor:pointer;border:1px solid rgba(255,255,255,.15)">
+                ${imgSrc
+                    ? `<img src="${imgSrc}" style="width:100%;height:80px;object-fit:cover">`
+                    : `<div style="width:100%;height:80px;display:flex;align-items:center;justify-content:center;font-size:28px">📦</div>`}
+                <div style="padding:7px 8px">
+                    <div style="font-size:11px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(r.title||'')}</div>
+                    <div style="font-size:10px;color:rgba(255,255,255,.6);margin-top:2px">${Math.round((r.similarity||0)*100)}% match</div>
+                </div>
+            </div>`;
+        }).join('')}
+        </div>`;
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── F-D: AI ADMIN ID CHECK ────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Patch handleArIdFile to auto-check ID after selection
+const _origHandleArIdFile = handleArIdFile;
+handleArIdFile = function(file) {
+    _origHandleArIdFile(file);
+    if (!file) return;
+    _checkAdminId(file);
+};
+
+async function _checkAdminId(file) {
+    const btn = document.getElementById('adminReqBtn');
+    if (btn) { btn.textContent = 'Checking ID…'; btn.disabled = true; }
+
+    const result = await sb.checkIdImage(file);
+
+    if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
+
+    if (!result) return;  // model error — let user submit anyway
+
+    if (!result.is_id) {
+        // show warning but don't hard block — admin still reviews
+        showToast(`⚠️ This doesn't look like an ID card (${Math.round(result.confidence*100)}% confidence). Please upload a clear photo of your staff ID.`);
+        // flash the upload area red briefly
+        const area = document.getElementById('arIdUploadArea');
+        if (area) {
+            area.style.borderColor = '#e05a5a';
+            setTimeout(() => { area.style.borderColor = ''; }, 2500);
+        }
+    } else {
+        showToast(`✅ ID detected (${Math.round(result.confidence*100)}% confidence)`);
+    }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── F-E: NUDGE NOTIFICATIONS from SSE ────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Already connected via connectUserSSE — just handle the nudge event type
+const _origConnectUserSSE = connectUserSSE;
+connectUserSSE = function(uid) {
+    if (_userSSE) _userSSE.close();
+    _userSSE = new EventSource(sb.API_BASE + `/stream?channel=user:${encodeURIComponent(uid)}`);
+    _userSSE.onmessage = e => {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'image_matches') {
+                addMatches(data.matches);
+                showToast(`🔍 ${data.matches.length} visual match${data.matches.length>1?'es':''} found!`);
+            }
+            if (data.type === 'nudge') {
+                _showNudgeBanner(data);
+            }
+        } catch {}
+    };
+    _userSSE.onerror = () => {
+        _userSSE.close();
+        setTimeout(() => connectUserSSE(uid), 3000);
+    };
+};
+
+function _showNudgeBanner(data) {
+    showToast(`📌 "${data.title}" — is this still active?`);
+    // Also show a persistent banner they can act on
+    const existing = document.getElementById('nudgeBanner');
+    if (existing) existing.remove();
+    const banner = document.createElement('div');
+    banner.id = 'nudgeBanner';
+    banner.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 16px;z-index:300;max-width:340px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.4)';
+    banner.innerHTML = `
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px">📌 Still active?</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px">"${escHtml(data.title)}"</div>
+        <div style="display:flex;gap:8px">
+            <button onclick="sb.updatePost('${data.post_id}',{status:'recovered'});document.getElementById('nudgeBanner').remove();showToast('Marked as recovered!')"
+                style="flex:1;padding:7px;background:rgba(34,201,122,.15);color:var(--found);border:1px solid rgba(34,201,122,.25);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">
+                ✓ Recovered
+            </button>
+            <button onclick="document.getElementById('nudgeBanner').remove()"
+                style="flex:1;padding:7px;background:rgba(255,255,255,.06);color:var(--muted);border:1px solid var(--border);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">
+                Still active
+            </button>
+        </div>`;
+    document.body.appendChild(banner);
+    setTimeout(() => banner.remove(), 15000);
+}
