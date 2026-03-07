@@ -195,6 +195,23 @@ const sb = (() => {
     async function getModLogs() { return api('/admin/log') || []; }
 
     /**
+     * F-C: Describe a camera frame scene for spatial hints
+     * Returns {hint: "near a blue chair on the left"}
+     */
+    async function describeFrameScene(blob) {
+        const form = new FormData();
+        form.append('file', blob, 'frame.jpg');
+        try {
+            const r = await fetch(`${API_URL}/ai/describe-scene`, {
+                method: 'POST',
+                body: form,
+            });
+            if (!r.ok) return null;
+            return await r.json();
+        } catch(e) { return null; }
+    }
+
+    /**
      * F-A: Auto-fill post form from photo using Florence-2.
      * Returns {title, description, category}
      */
@@ -352,7 +369,7 @@ const sb = (() => {
         getPosts, createPost, updatePost, deletePost,
         getComments, createComment, uploadImage,
         uploadImageChecked, uploadImageFull, createPostAI, searchByImage,
-        describeImage, aiSearch, cameraSearch, checkIdImage,
+        describeImage, describeFrameScene, aiSearch, cameraSearch, checkIdImage,
         getStats, setRole, banUser, unbanUser,
         getConversations, getDMThread, sendDM, getUnreadCount, getPostsSince,
         deleteComment, editComment, reportComment, voteComment,
