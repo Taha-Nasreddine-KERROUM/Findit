@@ -166,6 +166,44 @@
 
 <!-- ── CAMERA SEARCH OVERLAY ── -->
 <div id="cameraOverlay" style="display:none;position:fixed;inset:0;z-index:700;background:#000;flex-direction:column">
+
+    <!-- Step 1: what are you looking for? (shown before camera starts) -->
+    <div id="cameraSetup" style="position:absolute;inset:0;background:#0d0f14;display:flex;flex-direction:column;padding:24px 20px;z-index:2">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+            <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:#fff">📷 Camera Search</div>
+            <button onclick="closeCameraSearch()" style="background:rgba(255,255,255,.08);border:none;color:#fff;border-radius:50%;width:36px;height:36px;font-size:16px;cursor:pointer">✕</button>
+        </div>
+
+        <div style="font-size:13px;color:rgba(255,255,255,.5);margin-bottom:20px">Tell the camera what you're looking for — describe it in words OR upload a reference photo.</div>
+
+        <!-- text input -->
+        <div style="margin-bottom:16px">
+            <label style="font-size:11px;font-weight:600;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Describe what you lost</label>
+            <input id="cameraQueryText" type="text" placeholder="e.g. black JanSport backpack with red keychain…"
+                style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:12px 14px;color:#fff;font-size:13px;outline:none;box-sizing:border-box;font-family:inherit">
+        </div>
+
+        <div style="text-align:center;font-size:12px;color:rgba(255,255,255,.3);margin-bottom:16px">— or —</div>
+
+        <!-- reference image upload -->
+        <div id="cameraRefArea" onclick="document.getElementById('cameraRefInput').click()"
+             style="border:1.5px dashed rgba(255,255,255,.15);border-radius:14px;padding:20px;text-align:center;cursor:pointer;margin-bottom:20px;transition:border-color .2s">
+            <div id="cameraRefPlaceholder">
+                <div style="font-size:28px;margin-bottom:8px">🖼️</div>
+                <div style="font-size:13px;color:rgba(255,255,255,.5)">Upload a reference photo</div>
+                <div style="font-size:11px;color:rgba(255,255,255,.3);margin-top:4px">A photo of the same type of object</div>
+            </div>
+            <img id="cameraRefPreview" style="display:none;max-height:120px;border-radius:8px;max-width:100%;object-fit:contain">
+        </div>
+        <input id="cameraRefInput" type="file" accept="image/*" style="display:none" onchange="handleCameraRefImage(this.files[0])">
+
+        <button onclick="startCameraWithContext()"
+                style="width:100%;padding:14px;background:var(--accent);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">
+            Start Scanning
+        </button>
+    </div>
+
+    <!-- Step 2: live camera view -->
     <video id="cameraFeed" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
 
     <!-- scan ring -->
@@ -173,9 +211,9 @@
         <div id="scanRing" style="width:220px;height:220px;border-radius:28px;border:2px solid rgba(255,255,255,.5);box-shadow:0 0 0 4000px rgba(0,0,0,.45)"></div>
     </div>
 
-    <!-- top bar -->
-    <div style="position:absolute;top:0;left:0;right:0;padding:18px 16px;display:flex;align-items:center;justify-content:space-between">
-        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px;color:#fff">Point at an object</div>
+    <!-- top bar (shown during scanning) -->
+    <div id="cameraTopBar" style="display:none;position:absolute;top:0;left:0;right:0;padding:18px 16px;display:none;align-items:center;justify-content:space-between">
+        <div id="cameraQueryLabel" style="font-size:13px;color:rgba(255,255,255,.8);background:rgba(0,0,0,.5);padding:6px 12px;border-radius:20px;max-width:70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
         <button onclick="closeCameraSearch()" style="background:rgba(0,0,0,.5);border:none;color:#fff;border-radius:50%;width:36px;height:36px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center">✕</button>
     </div>
 
