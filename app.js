@@ -2067,6 +2067,7 @@ async function startCameraWithContext() {
 
 function closeCameraSearch() {
     _cameraScanning = false;
+    _scanInProgress = false;
     clearInterval(_cameraTimer);
     _cameraTimer = null;
     if (_cameraStream) {
@@ -2094,11 +2095,16 @@ function _setCameraStatus(state, text) {
     label.textContent = text;
 }
 
+let _scanInProgress = false;
+
 async function _doScan() {
     if (!_cameraScanning) return;
+    if (_scanInProgress) return;  // don't stack calls if Florence is still thinking
+
     const video = document.getElementById('cameraFeed');
     if (!video || video.readyState < 2) return;
 
+    _scanInProgress = true;
     _setCameraStatus('scanning', '🔍 Analysing frame…');
 
     // capture full frame
@@ -2108,38 +2114,41 @@ async function _doScan() {
     canvas.getContext('2d').drawImage(video, 0, 0);
 
     canvas.toBlob(async frameBlob => {
-        if (!frameBlob || !_cameraScanning) return;
+        if (!frameBlob || !_cameraScanning) { _scanInProgress = false; return; }
 
-        // build the target description
-        let targetDesc = _cameraQueryText;
-        if (!targetDesc && _cameraRefBlob) targetDesc = '__ref_image__';
+        try {
+            // build the target description
+            let targetDesc = _cameraQueryText;
+            if (!targetDesc && _cameraRefBlob) targetDesc = '__ref_image__';
 
-        const result = await sb.findItemInFrame(frameBlob, _cameraRefBlob, targetDesc);
+            const result = await sb.findItemInFrame(frameBlob, _cameraRefBlob, targetDesc);
 
-        if (!result) {
-            _setCameraStatus('scanning', 'Analysing… (model loading, ~30s first time)');
-            return;
+            if (!result) {
+                _setCameraStatus('scanning', '⏳ Model loading, keep the camera steady…');
+                return;
+            }
+
+            if (result.found) {
+                _cameraLastFound = true;
+                _setCameraStatus('found', `✅ ${result.message}`);
+                _showCameraOverlay(result.message, result.confidence);
+                document.getElementById('cameraLiveBorder').style.borderColor = 'rgba(34,201,122,.8)';
+                setTimeout(() => {
+                    if (document.getElementById('cameraLiveBorder'))
+                        document.getElementById('cameraLiveBorder').style.borderColor = 'rgba(255,255,255,.15)';
+                }, 2500);
+            } else {
+                _cameraLastFound = false;
+                const seeing = result.message || 'Not visible — keep moving…';
+                _setCameraStatus('notfound', seeing);
+                _clearCameraOverlay();
+            }
+        } catch(e) {
+            _setCameraStatus('scanning', 'Frame analysed — keep moving');
+        } finally {
+            _scanInProgress = false;
         }
-
-        if (result.found) {
-            _cameraLastFound = true;
-            _setCameraStatus('found', `✅ ${result.message}`);
-            _showCameraOverlay(result.message, result.confidence);
-            document.getElementById('cameraLiveBorder').style.borderColor = 'rgba(34,201,122,.8)';
-            setTimeout(() => {
-                if (document.getElementById('cameraLiveBorder'))
-                    document.getElementById('cameraLiveBorder').style.borderColor = 'rgba(255,255,255,.15)';
-            }, 2500);
-        } else {
-            _cameraLastFound = false;
-            // Show what the camera DOES see — helps user understand it's working
-            const seeing = result.caption
-                ? `Not here. Seeing: ${result.caption.slice(0, 80)}…`
-                : (result.message || 'Not visible here — keep looking…');
-            _setCameraStatus('notfound', seeing);
-            _clearCameraOverlay();
-        }
-    }, 'image/jpeg', 0.88);
+    }, 'image/jpeg', 0.82);
 }
 
 function _showCameraOverlay(message, confidence) {
