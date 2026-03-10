@@ -226,26 +226,17 @@
         <!-- full frame video -->
         <video id="cameraFeed" autoplay playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
 
-        <!-- subtle border that pulses green on find -->
-        <div id="cameraLiveBorder" style="position:absolute;inset:0;border:2px solid rgba(255,255,255,.15);pointer-events:none;transition:border-color .4s"></div>
+        <!-- canvas drawn on top of video for bounding box -->
+        <canvas id="cameraCanvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
 
         <!-- top bar: what we're looking for + close -->
-        <div style="position:absolute;top:0;left:0;right:0;padding:16px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(rgba(0,0,0,.6),transparent);z-index:2">
+        <div style="position:absolute;top:0;left:0;right:0;padding:16px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(rgba(0,0,0,.6),transparent);z-index:4">
             <div id="cameraTargetLabel" style="font-size:13px;color:rgba(255,255,255,.9);font-weight:600;max-width:75%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
             <button onclick="closeCameraSearch()" style="background:rgba(0,0,0,.5);border:none;color:#fff;border-radius:50%;width:36px;height:36px;font-size:16px;cursor:pointer;flex-shrink:0">✕</button>
         </div>
 
-        <!-- FOUND overlay — big card in centre -->
-        <div id="cameraFoundOverlay" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;z-index:3;padding:24px">
-            <div style="background:rgba(34,201,122,.18);backdrop-filter:blur(16px);border:1.5px solid rgba(34,201,122,.5);border-radius:20px;padding:20px 22px;text-align:center;max-width:320px;width:100%">
-                <div style="font-size:32px;margin-bottom:8px">🎯</div>
-                <div id="cameraFoundMsg" style="font-size:15px;font-weight:700;color:#fff;line-height:1.4;margin-bottom:6px"></div>
-                <div id="cameraFoundConf" style="font-size:12px;color:rgba(255,255,255,.5)"></div>
-            </div>
-        </div>
-
         <!-- bottom status bar -->
-        <div id="cameraStatusBar" style="position:absolute;bottom:0;left:0;right:0;padding:14px 18px;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);z-index:2;transition:background .3s">
+        <div id="cameraStatusBar" style="position:absolute;bottom:0;left:0;right:0;padding:14px 18px;background:rgba(0,0,0,.55);backdrop-filter:blur(8px);z-index:4;transition:background .3s">
             <div id="cameraStatusText" style="font-size:13px;color:#fff;text-align:center;font-weight:500"></div>
         </div>
     </div>
