@@ -569,13 +569,9 @@ button { cursor: pointer; font-family: inherit; }
    ══════════════════════════════════════════════════════ */
 
 /* camera icon in search bar */
-.img-search-btn {
-    background: none; border: none; cursor: pointer;
-    color: var(--muted); padding: 4px 5px; border-radius: 7px;
-    display: flex; align-items: center; flex-shrink: 0;
-    transition: color .18s, background .18s;
-}
+.img-search-btn { background: none; border: none; cursor: pointer; color: var(--muted); padding: 4px 5px; border-radius: 7px; display: flex; align-items: center; flex-shrink: 0; transition: color .18s, background .18s; }
 .img-search-btn:hover { color: var(--accent); background: rgba(91,141,255,.1); }
+.img-search-btn.active { color: #fff; background: var(--accent); }
 
 /* number badge on logo when there are matches */
 .match-dot {
