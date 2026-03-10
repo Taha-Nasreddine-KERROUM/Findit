@@ -2014,6 +2014,25 @@ let _cameraQueryText = '';
 let _cameraLastFound = false;
 let _cameraRafId     = null;   // requestAnimationFrame id
 
+function openCameraSearch() {
+    document.getElementById('cameraOverlay').style.display = 'flex';
+    document.getElementById('cameraSetup').style.display   = 'flex';
+    document.getElementById('cameraLive').style.display    = 'none';
+}
+
+function handleCameraRefImage(file) {
+    if (!file) return;
+    _cameraRefBlob = file;
+    const preview     = document.getElementById('cameraRefPreview');
+    const placeholder = document.getElementById('cameraRefPlaceholder');
+    if (preview) { preview.src = URL.createObjectURL(file); preview.style.display = 'block'; }
+    if (placeholder) placeholder.style.display = 'none';
+}
+
+function startCameraWithContext() {
+    startCameraSearch();
+}
+
 function setCameraRefPhoto(file) {
     _cameraRefBlob = file || null;
     const preview = document.getElementById('cameraRefPreview');
