@@ -382,6 +382,7 @@ const sb = (() => {
     }
 
     return {
+        API_URL,
         API_BASE: API_URL,
         register, login,
         handleCallback, restoreSession, signOut, getMe,
