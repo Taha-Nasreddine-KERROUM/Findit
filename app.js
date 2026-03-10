@@ -2058,7 +2058,9 @@ async function startCameraWithContext() {
         });
         document.getElementById('cameraFeed').srcObject = _cameraStream;
         _cameraScanning = true;
-        _cameraTimer = setInterval(_doScan, 3000);
+        // Don't use fixed interval — fire next scan immediately after previous finishes
+        // This way we're always scanning as fast as the model allows, not waiting artificially
+        _cameraTimer = setInterval(_doScan, 100); // checks every 100ms but _scanInProgress guards stacking
     } catch(e) {
         showToast('Camera access denied — please allow camera permission');
         closeCameraSearch();
@@ -2099,6 +2101,24 @@ function _setCameraStatus(state, text) {
 let _scanInProgress   = false;
 let _statusClearTimer = null;
 let _boxFadeTimer     = null;
+let _lastFrameData    = null;  // for pixel diff
+
+function _frameChanged(ctx, w, h) {
+    // Sample 32x32 grid of pixels — fast diff to detect if scene changed
+    const current = ctx.getImageData(0, 0, w, h).data;
+    if (!_lastFrameData || _lastFrameData.length !== current.length) {
+        _lastFrameData = current;
+        return true;
+    }
+    let diff = 0;
+    const step = Math.floor(current.length / 512); // sample ~512 pixels
+    for (let i = 0; i < current.length; i += step) {
+        diff += Math.abs(current[i] - _lastFrameData[i]);
+    }
+    _lastFrameData = current;
+    const avgDiff = diff / (current.length / step);
+    return avgDiff > 8; // threshold — ignore tiny lighting flickers
+}
 
 function _drawBox(box, label, confidence) {
     const video  = document.getElementById('cameraFeed');
@@ -2182,7 +2202,22 @@ async function _doScan() {
 
     const vw     = video.videoWidth  || 1280;
     const vh     = video.videoHeight || 720;
-    const scale  = Math.min(1, 768 / vw);
+
+    // Step 1: tiny canvas for pixel diff (fast, never sent to server)
+    const diffCanvas = document.createElement('canvas');
+    diffCanvas.width  = 160;
+    diffCanvas.height = Math.round(160 * vh / vw);
+    const diffCtx = diffCanvas.getContext('2d');
+    diffCtx.drawImage(video, 0, 0, diffCanvas.width, diffCanvas.height);
+
+    if (!_frameChanged(diffCtx, diffCanvas.width, diffCanvas.height)) {
+        // Scene hasn't changed — skip this frame entirely, saves a full server round-trip
+        _scanInProgress = false;
+        return;
+    }
+
+    // Step 2: 320px canvas to send to OWLv2 — small enough to be fast, big enough to detect
+    const scale  = Math.min(1, 320 / vw);
     const canvas = document.createElement('canvas');
     canvas.width  = Math.round(vw * scale);
     canvas.height = Math.round(vh * scale);
