@@ -573,6 +573,15 @@ button { cursor: pointer; font-family: inherit; }
 .img-search-btn:hover { color: var(--accent); background: rgba(91,141,255,.1); }
 .img-search-btn.active { color: #fff; background: var(--accent); }
 
+/* ── AI sparkle button ── */
+.ai-search-btn { background: none; border: none; cursor: pointer; padding: 4px 5px; border-radius: 7px; display: flex; align-items: center; flex-shrink: 0; }
+.ai-sparkle-icon { overflow: visible; }
+.sparkle-path { fill: none; stroke: var(--muted); transition: stroke .2s, fill .2s; }
+.ai-search-btn:hover .sparkle-path { stroke: var(--accent); }
+@keyframes rainbow-shift { 0%,100% { stop-color: #ff3cac; } 20% { stop-color: #ff8800; } 40% { stop-color: #ffe600; } 60% { stop-color: #00e676; } 80% { stop-color: #00b0ff; } }
+@keyframes rainbow-shift2 { 0%,100% { stop-color: #a855f7; } 20% { stop-color: #ff3cac; } 40% { stop-color: #ff8800; } 60% { stop-color: #ffe600; } 80% { stop-color: #00e676; } }
+.ai-search-btn.active .sparkle-path { stroke: none; fill: url(#rainbowGrad); filter: drop-shadow(0 0 5px rgba(168,85,247,.7)); }
+
 /* number badge on logo when there are matches */
 .match-dot {
     position: absolute; top: -3px; right: -3px;
