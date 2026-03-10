@@ -2068,6 +2068,7 @@ async function startCameraWithContext() {
 function closeCameraSearch() {
     _cameraScanning = false;
     _scanInProgress = false;
+    _clearCanvas();
     clearInterval(_cameraTimer);
     _cameraTimer = null;
     if (_cameraStream) {
@@ -2095,8 +2096,80 @@ function _setCameraStatus(state, text) {
     label.textContent = text;
 }
 
-let _scanInProgress  = false;
+let _scanInProgress   = false;
 let _statusClearTimer = null;
+let _boxFadeTimer     = null;
+
+function _drawBox(box, label, confidence) {
+    const video  = document.getElementById('cameraFeed');
+    const canvas = document.getElementById('cameraCanvas');
+    if (!canvas || !video) return;
+
+    // match canvas pixel size to the displayed video size
+    const rect   = video.getBoundingClientRect();
+    canvas.width  = rect.width;
+    canvas.height = rect.height;
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!box) return;
+
+    const [fx1, fy1, fx2, fy2] = box;
+    const x1 = fx1 * canvas.width;
+    const y1 = fy1 * canvas.height;
+    const x2 = fx2 * canvas.width;
+    const y2 = fy2 * canvas.height;
+    const bw = x2 - x1;
+    const bh = y2 - y1;
+
+    // glow effect
+    ctx.shadowColor   = '#22c97a';
+    ctx.shadowBlur    = 18;
+    ctx.strokeStyle   = '#22c97a';
+    ctx.lineWidth     = 3;
+    ctx.strokeRect(x1, y1, bw, bh);
+
+    // corner accents
+    ctx.shadowBlur  = 0;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth   = 3;
+    const cs = Math.min(bw, bh) * 0.18; // corner size
+    [
+        [x1, y1, cs, 0, 0, cs],
+        [x2, y1, -cs, 0, 0, cs],
+        [x1, y2, cs, 0, 0, -cs],
+        [x2, y2, -cs, 0, 0, -cs],
+    ].forEach(([ox, oy, dx1, dy1, dx2, dy2]) => {
+        ctx.beginPath();
+        ctx.moveTo(ox + dx1, oy + dy1);
+        ctx.lineTo(ox, oy);
+        ctx.lineTo(ox + dx2, oy + dy2);
+        ctx.stroke();
+    });
+
+    // label pill above the box
+    const pct   = Math.round(confidence * 100);
+    const text  = `${label}  ${pct}%`;
+    ctx.font    = 'bold 13px system-ui, sans-serif';
+    const tw    = ctx.measureText(text).width;
+    const ph    = 22, pw = tw + 16, pr = 6;
+    const px    = x1;
+    const py    = Math.max(0, y1 - ph - 4);
+
+    ctx.fillStyle = '#22c97a';
+    ctx.beginPath();
+    ctx.roundRect(px, py, pw, ph, pr);
+    ctx.fill();
+
+    ctx.fillStyle = '#000';
+    ctx.fillText(text, px + 8, py + 15);
+}
+
+function _clearCanvas() {
+    const canvas = document.getElementById('cameraCanvas');
+    if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
 
 async function _doScan() {
     if (!_cameraScanning) return;
@@ -2107,51 +2180,43 @@ async function _doScan() {
 
     _scanInProgress = true;
 
-    const canvas  = document.createElement('canvas');
-    canvas.width  = video.videoWidth  || 1280;
-    canvas.height = video.videoHeight || 720;
-    canvas.getContext('2d').drawImage(video, 0, 0);
+    const vw     = video.videoWidth  || 1280;
+    const vh     = video.videoHeight || 720;
+    const scale  = Math.min(1, 768 / vw);
+    const canvas = document.createElement('canvas');
+    canvas.width  = Math.round(vw * scale);
+    canvas.height = Math.round(vh * scale);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob(async frameBlob => {
         if (!frameBlob || !_cameraScanning) { _scanInProgress = false; return; }
-
-        // show a subtle "scanning" pulse — don't overwrite a "found" message
-        if (!_cameraLastFound) _setCameraStatus('scanning', '🔍 Scanning…');
+        _setCameraStatus('scanning', '🔍 Scanning…');
 
         try {
             let targetDesc = _cameraQueryText;
             if (!targetDesc && _cameraRefBlob) targetDesc = '__ref_image__';
-
             const result = await sb.findItemInFrame(frameBlob, _cameraRefBlob, targetDesc);
 
-            if (!result) {
-                _setCameraStatus('idle', '⏳ AI loading — keep the camera steady…');
-                return;
-            }
+            clearTimeout(_boxFadeTimer);
 
-            // clear any previous auto-hide timer
-            clearTimeout(_statusClearTimer);
-
-            if (result.found) {
+            if (result && result.found && result.box) {
                 _cameraLastFound = true;
-                _setCameraStatus('found', `✅ ${result.message}`);
-                _showCameraOverlay(result.message, result.confidence);
-                document.getElementById('cameraLiveBorder').style.borderColor = 'rgba(34,201,122,.8)';
-                // keep found message for 4s then go back to scanning
-                _statusClearTimer = setTimeout(() => {
+                _drawBox(result.box, result.label || targetDesc, result.confidence);
+                _setCameraStatus('found', `✅ Found! ${Math.round(result.confidence * 100)}% confident`);
+                // fade box out after 3s if item leaves frame
+                _boxFadeTimer = setTimeout(() => {
                     _cameraLastFound = false;
-                    if (document.getElementById('cameraLiveBorder'))
-                        document.getElementById('cameraLiveBorder').style.borderColor = 'rgba(255,255,255,.15)';
-                }, 4000);
+                    _clearCanvas();
+                    _setCameraStatus('idle', 'Point camera around the room…');
+                }, 3000);
             } else {
                 _cameraLastFound = false;
-                _clearCameraOverlay();
-                // show what it sees for 2.5s so user can read it
-                _setCameraStatus('notfound', result.message || 'Not visible — keep moving…');
+                _clearCanvas();
+                _setCameraStatus('notfound', 'Not visible — keep moving…');
                 _statusClearTimer = setTimeout(() => {
                     if (!_cameraLastFound)
                         _setCameraStatus('idle', 'Point camera around the room…');
-                }, 2500);
+                }, 2000);
             }
         } catch(e) {
             _setCameraStatus('idle', 'Point camera around the room…');
