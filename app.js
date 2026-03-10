@@ -379,8 +379,27 @@ function setImageSearchMode(results) {
 }
 
 // ── SEARCH ────────────────────────────────────────────────────────────────────
-let _aiSearchTimer = null;
+let _aiSearchTimer  = null;
 let _aiSearchActive = false;
+let _aiModeOn       = false;   // toggled by the bulb button
+
+function toggleAiSearch() {
+    _aiModeOn = !_aiModeOn;
+    const btn = document.getElementById('aiSearchBtn');
+    btn.classList.toggle('active', _aiModeOn);
+    btn.title = _aiModeOn ? 'AI search ON — click to turn off' : 'AI semantic search';
+
+    const q = document.getElementById('searchInput').value.trim();
+    if (!_aiModeOn) {
+        exitAiSearch();
+        App.searchQuery = q;
+        renderFeed();
+    } else if (q.length > 1) {
+        runAiSearch(q);
+    } else {
+        showToast('✨ AI search on — type what you\'re looking for');
+    }
+}
 
 function initSearch() {
     const input = document.getElementById('searchInput');
@@ -398,18 +417,20 @@ function initSearch() {
             return;
         }
 
-        // Any query → semantic AI search after 600ms pause
-        _aiSearchTimer = setTimeout(() => runAiSearch(q), 600);
+        if (_aiModeOn) {
+            // AI mode: debounce 600ms then semantic search
+            _aiSearchTimer = setTimeout(() => runAiSearch(q), 600);
+        } else {
+            // Normal mode: instant keyword filter
+            App.searchQuery = q;
+            renderFeed();
+        }
     });
 
-    // Also trigger on Enter immediately
     input.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' && _aiModeOn) {
             const q = input.value.trim();
-            if (q.length > 2) {
-                clearTimeout(_aiSearchTimer);
-                runAiSearch(q);
-            }
+            if (q.length > 1) { clearTimeout(_aiSearchTimer); runAiSearch(q); }
         }
     });
 
@@ -1970,6 +1991,9 @@ async function runAiSearch(query) {
 
 function exitAiSearch() {
     _aiSearchActive = false;
+    _aiModeOn = false;
+    const btn = document.getElementById('aiSearchBtn');
+    if (btn) { btn.classList.remove('active'); btn.title = 'AI semantic search'; }
     const chip = document.getElementById('chipAiSearch');
     if (chip) { chip.style.display = 'none'; chip.classList.remove('active'); }
     setImageSearchMode(null);
