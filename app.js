@@ -2088,11 +2088,10 @@ async function startCameraSearch() {
             const msg = JSON.parse(evt.data);
             if (msg.status === 'ready') {
                 _setCameraStatus('scanning', '🔍 Scanning…');
-                // Start sending frames continuously
-                _streamFrames();
+                _streamFrames();  // kick off first frame
                 return;
             }
-            // Got a detection result
+            // Got detection result — draw it, then send next frame
             clearTimeout(_cameraWs._fadeTimer);
             if (msg.found && msg.box) {
                 _cameraLastFound = true;
@@ -2108,6 +2107,8 @@ async function startCameraSearch() {
                 _clearCanvas();
                 _setCameraStatus('scanning', '🔍 Scanning…');
             }
+            // Send next frame only after we got the response — prevents pile-up
+            if (_cameraScanning) _streamFrames();
         };
 
         _cameraWs.onerror = () => _setCameraStatus('idle', 'Connection error — retrying…');
@@ -2124,12 +2125,11 @@ function _streamFrames() {
 
     const video = document.getElementById('cameraFeed');
     if (!video || video.readyState < 2) {
-        _cameraRafId = requestAnimationFrame(_streamFrames);
+        setTimeout(_streamFrames, 100);
         return;
     }
 
-    // Capture frame at 320px wide — fast enough for YOLO, small enough to send quickly
-    const scale  = Math.min(1, 320 / (video.videoWidth || 640));
+    const scale  = Math.min(1, 640 / (video.videoWidth || 640));
     const canvas = document.createElement('canvas');
     canvas.width  = Math.round((video.videoWidth  || 640) * scale);
     canvas.height = Math.round((video.videoHeight || 480) * scale);
@@ -2141,12 +2141,12 @@ function _streamFrames() {
             blob.arrayBuffer().then(buf => {
                 if (_cameraWs && _cameraWs.readyState === WebSocket.OPEN) {
                     _cameraWs.send(buf);
-                    // Send next frame as soon as this one is sent — true live stream
-                    setTimeout(_streamFrames, 50); // ~20fps attempt, YOLO will process as fast as it can
+                    // Don't call _streamFrames here — onmessage will trigger next frame
+                    // This ensures one frame in flight at a time, no pile-up
                 }
             });
         }
-    }, 'image/jpeg', 0.75);
+    }, 'image/jpeg', 0.8);
 }
 
 function closeCameraSearch() {
