@@ -2007,12 +2007,11 @@ function exitAiSearch() {
 //          Nothing to do with posts. Pure real-world object finder.
 // ══════════════════════════════════════════════════════════════════════════════
 let _cameraStream    = null;
-let _cameraWs        = null;   // WebSocket to backend
 let _cameraScanning  = false;
 let _cameraRefBlob   = null;
 let _cameraQueryText = '';
 let _cameraLastFound = false;
-let _cameraRafId     = null;   // requestAnimationFrame id
+let _scanning        = false;  // prevent overlapping requests
 
 function openCameraSearch() {
     document.getElementById('cameraOverlay').style.display = 'flex';
@@ -2025,26 +2024,11 @@ function handleCameraRefImage(file) {
     _cameraRefBlob = file;
     const preview     = document.getElementById('cameraRefPreview');
     const placeholder = document.getElementById('cameraRefPlaceholder');
-    if (preview) { preview.src = URL.createObjectURL(file); preview.style.display = 'block'; }
+    if (preview)     { preview.src = URL.createObjectURL(file); preview.style.display = 'block'; }
     if (placeholder) placeholder.style.display = 'none';
 }
 
-function startCameraWithContext() {
-    startCameraSearch();
-}
-
-function setCameraRefPhoto(file) {
-    _cameraRefBlob = file || null;
-    const preview = document.getElementById('cameraRefPreview');
-    if (preview) preview.style.display = file ? 'block' : 'none';
-}
-
-function clearCameraRef() {
-    _cameraRefBlob   = null;
-    _cameraQueryText = '';
-    const preview = document.getElementById('cameraRefPreview');
-    if (preview) preview.style.display = 'none';
-}
+function startCameraWithContext() { startCameraSearch(); }
 
 async function startCameraSearch() {
     _cameraQueryText = (document.getElementById('cameraQueryText')?.value || '').trim();
@@ -2052,9 +2036,8 @@ async function startCameraSearch() {
         showToast('Enter what you are looking for or add a reference photo');
         return;
     }
-
     const label = _cameraQueryText || '📷 Reference photo';
-    document.getElementById('cameraTargetLabel').textContent = '🔍 Looking for: ' + label;
+    document.getElementById('cameraTargetLabel').textContent = '🔍 ' + label;
     document.getElementById('cameraSetup').style.display = 'none';
     document.getElementById('cameraLive').style.display  = 'flex';
 
@@ -2065,99 +2048,69 @@ async function startCameraSearch() {
         const video = document.getElementById('cameraFeed');
         video.srcObject = _cameraStream;
         await video.play();
-
         _cameraScanning = true;
-        _setCameraStatus('scanning', '⏳ Connecting to AI…');
-
-        // Open WebSocket to backend
-        const wsUrl = (sb.API_URL || '').replace('https://', 'wss://').replace('http://', 'ws://');
-        _cameraWs = new WebSocket(`${wsUrl}/ws/camera-search`);
-        _cameraWs.binaryType = 'arraybuffer';
-
-        _cameraWs.onopen = async () => {
-            // Send query config first
-            if (_cameraRefBlob) {
-                const b64 = await _blobToBase64(_cameraRefBlob);
-                _cameraWs.send(JSON.stringify({ ref_image_b64: b64.split(',')[1] }));
-            } else {
-                _cameraWs.send(JSON.stringify({ target: _cameraQueryText }));
-            }
-        };
-
-        _cameraWs.onmessage = (evt) => {
-            const msg = JSON.parse(evt.data);
-            if (msg.status === 'ready') {
-                _setCameraStatus('scanning', '🔍 Scanning…');
-                _streamFrames();  // kick off first frame
-                return;
-            }
-            // Got detection result — draw it, then send next frame
-            clearTimeout(_cameraWs._fadeTimer);
-            if (msg.found && msg.box) {
-                _cameraLastFound = true;
-                _drawBox(msg.box, _cameraQueryText || 'item', msg.confidence);
-                _setCameraStatus('found', `✅ Found! ${Math.round(msg.confidence * 100)}% confident`);
-                _cameraWs._fadeTimer = setTimeout(() => {
-                    _cameraLastFound = false;
-                    _clearCanvas();
-                    if (_cameraScanning) _setCameraStatus('scanning', '🔍 Scanning…');
-                }, 1500);
-            } else {
-                _cameraLastFound = false;
-                _clearCanvas();
-                _setCameraStatus('scanning', '🔍 Scanning…');
-            }
-            // Send next frame only after we got the response — prevents pile-up
-            if (_cameraScanning) _streamFrames();
-        };
-
-        _cameraWs.onerror = () => _setCameraStatus('idle', 'Connection error — retrying…');
-        _cameraWs.onclose = () => { if (_cameraScanning) _setCameraStatus('idle', 'Disconnected'); };
-
+        _scanning = false;
+        _setCameraStatus('scanning', '🔍 Scanning…');
+        _scanLoop();
     } catch(e) {
-        showToast('Camera access denied — please allow camera permission');
+        showToast('Camera access denied');
         closeCameraSearch();
     }
 }
 
-function _streamFrames() {
-    if (!_cameraScanning || !_cameraWs || _cameraWs.readyState !== WebSocket.OPEN) return;
+async function _scanLoop() {
+    if (!_cameraScanning) return;
 
-    const video = document.getElementById('cameraFeed');
-    if (!video || video.readyState < 2) {
-        setTimeout(_streamFrames, 100);
+    // Don't overlap — if previous request still running, wait and retry
+    if (_scanning) {
+        setTimeout(_scanLoop, 100);
         return;
     }
 
-    const scale  = Math.min(1, 640 / (video.videoWidth || 640));
+    const video = document.getElementById('cameraFeed');
+    if (!video || video.readyState < 2) {
+        setTimeout(_scanLoop, 100);
+        return;
+    }
+
+    // Capture frame
+    const vw = video.videoWidth || 640;
+    const vh = video.videoHeight || 480;
     const canvas = document.createElement('canvas');
-    canvas.width  = Math.round((video.videoWidth  || 640) * scale);
-    canvas.height = Math.round((video.videoHeight || 480) * scale);
+    canvas.width  = Math.min(vw, 640);
+    canvas.height = Math.round(vh * (canvas.width / vw));
     canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    canvas.toBlob(blob => {
+    canvas.toBlob(async blob => {
         if (!blob || !_cameraScanning) return;
-        if (_cameraWs && _cameraWs.readyState === WebSocket.OPEN) {
-            blob.arrayBuffer().then(buf => {
-                if (_cameraWs && _cameraWs.readyState === WebSocket.OPEN) {
-                    _cameraWs.send(buf);
-                    // Don't call _streamFrames here — onmessage will trigger next frame
-                    // This ensures one frame in flight at a time, no pile-up
-                }
-            });
+        _scanning = true;
+        try {
+            const result = await sb.findItemInFrame(blob, _cameraRefBlob, _cameraQueryText);
+            if (!_cameraScanning) return;
+
+            if (result && result.found && result.box) {
+                _cameraLastFound = true;
+                _drawBox(result.box, _cameraQueryText || 'item', result.confidence);
+                _setCameraStatus('found', `✅ ${Math.round(result.confidence * 100)}% confident`);
+            } else {
+                _clearCanvas();
+                if (!_cameraLastFound) _setCameraStatus('scanning', '🔍 Scanning…');
+                _cameraLastFound = false;
+            }
+        } catch(e) {
+            // silent — keep scanning
+        } finally {
+            _scanning = false;
+            // Immediately scan next frame — as fast as server can respond
+            if (_cameraScanning) _scanLoop();
         }
-    }, 'image/jpeg', 0.8);
+    }, 'image/jpeg', 0.85);
 }
 
 function closeCameraSearch() {
     _cameraScanning = false;
+    _scanning = false;
     _clearCanvas();
-    cancelAnimationFrame(_cameraRafId);
-
-    if (_cameraWs) {
-        _cameraWs.close();
-        _cameraWs = null;
-    }
     if (_cameraStream) {
         _cameraStream.getTracks().forEach(t => t.stop());
         _cameraStream = null;
@@ -2165,7 +2118,6 @@ function closeCameraSearch() {
     _cameraRefBlob   = null;
     _cameraQueryText = '';
     _cameraLastFound = false;
-
     document.getElementById('cameraOverlay').style.display = 'none';
     const setup = document.getElementById('cameraSetup');
     const live  = document.getElementById('cameraLive');
@@ -2173,27 +2125,13 @@ function closeCameraSearch() {
     if (live)  live.style.display  = 'none';
 }
 
-function _blobToBase64(blob) {
-    return new Promise(res => {
-        const r = new FileReader();
-        r.onload  = () => res(r.result);
-        r.readAsDataURL(blob);
-    });
-}
-
 function _setCameraStatus(state, text) {
-    const bar    = document.getElementById('cameraStatusBar');
-    const label  = document.getElementById('cameraStatusText');
-    const colors = {
-        idle:     'rgba(0,0,0,.55)',
-        scanning: 'rgba(91,141,255,.7)',
-        found:    'rgba(34,201,122,.8)',
-        notfound: 'rgba(0,0,0,.55)',
-    };
+    const bar   = document.getElementById('cameraStatusBar');
+    const label = document.getElementById('cameraStatusText');
+    const colors = { idle:'rgba(0,0,0,.55)', scanning:'rgba(91,141,255,.7)', found:'rgba(34,201,122,.8)', notfound:'rgba(0,0,0,.55)' };
     if (bar)   bar.style.background = colors[state] || colors.idle;
     if (label) label.textContent = text;
 }
-
 
 // ══════════════════════════════════════════════════════════════════════════════
 // ── F-D: AI ADMIN ID CHECK ────────────────────────────────────────────────────
