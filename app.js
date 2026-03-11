@@ -2125,6 +2125,62 @@ function closeCameraSearch() {
     if (live)  live.style.display  = 'none';
 }
 
+function _clearCanvas() {
+    const canvas = document.getElementById('cameraCanvas');
+    if (!canvas) return;
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function _drawBox(box, label, confidence) {
+    const video  = document.getElementById('cameraFeed');
+    const canvas = document.getElementById('cameraCanvas');
+    if (!canvas || !video) return;
+
+    // Match canvas size to displayed video
+    const rect    = video.getBoundingClientRect();
+    canvas.width  = rect.width  || video.offsetWidth  || 640;
+    canvas.height = rect.height || video.offsetHeight || 480;
+
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const [fx1, fy1, fx2, fy2] = box;
+    const x1 = fx1 * canvas.width;
+    const y1 = fy1 * canvas.height;
+    const x2 = fx2 * canvas.width;
+    const y2 = fy2 * canvas.height;
+    const bw = x2 - x1;
+    const bh = y2 - y1;
+
+    // Glowing green box
+    ctx.shadowColor  = '#22c97a';
+    ctx.shadowBlur   = 20;
+    ctx.strokeStyle  = '#22c97a';
+    ctx.lineWidth    = 3;
+    ctx.strokeRect(x1, y1, bw, bh);
+
+    // Corner accents
+    ctx.shadowBlur  = 0;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth   = 3;
+    const cs = Math.min(bw, bh) * 0.2;
+    [[x1,y1,cs,0,0,cs],[x2,y1,-cs,0,0,cs],[x1,y2,cs,0,0,-cs],[x2,y2,-cs,0,0,-cs]]
+        .forEach(([ox,oy,dx1,dy1,dx2,dy2]) => {
+            ctx.beginPath(); ctx.moveTo(ox+dx1,oy+dy1); ctx.lineTo(ox,oy); ctx.lineTo(ox+dx2,oy+dy2); ctx.stroke();
+        });
+
+    // Label pill
+    const pct  = Math.round(confidence * 100);
+    const text = `${label}  ${pct}%`;
+    ctx.font   = 'bold 14px system-ui, sans-serif';
+    const tw   = ctx.measureText(text).width;
+    const px   = x1, py = Math.max(0, y1 - 28);
+    ctx.fillStyle = '#22c97a';
+    ctx.beginPath(); ctx.roundRect(px, py, tw + 16, 24, 5); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.fillText(text, px + 8, py + 17);
+}
+
 function _setCameraStatus(state, text) {
     const bar   = document.getElementById('cameraStatusBar');
     const label = document.getElementById('cameraStatusText');
