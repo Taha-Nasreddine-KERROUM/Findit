@@ -2090,7 +2090,8 @@ async function _scanLoop() {
 
             if (result && result.found && result.box) {
                 _cameraLastFound = true;
-                _drawBox(result.box, _cameraQueryText || 'item', result.confidence);
+                const label = result.label || _cameraQueryText || 'item';
+                _drawBox(result.box, label, result.confidence);
                 _setCameraStatus('found', `✅ ${Math.round(result.confidence * 100)}% confident`);
             } else {
                 _clearCanvas();
