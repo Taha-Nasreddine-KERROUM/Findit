@@ -1643,12 +1643,28 @@ async function submitAdminRequest() {
         return;
     }
 
-    if (btn) btn.textContent = 'Sending…';
+    if (btn) btn.textContent = 'Verifying ID…';
     const res = await sb.submitAdminRequest({ uid, role_title: 'staff', reason: 'Staff ID submitted', email: uid, name: uid || 'unknown', id_image_url: idImageUrl });
     if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
     if (!res || res._error) { showToast('Could not send request. Try again.'); return; }
-    document.getElementById('adminReqForm').style.display = 'none';
-    document.getElementById('adminReqSent').style.display = 'block';
+
+    if (res.auto_approved) {
+        // Update local user role so UI reflects admin immediately
+        if (App.currentUser) App.currentUser.role = 'admin';
+        showToast('✅ ID verified — admin access granted!');
+        document.getElementById('adminReqForm').style.display = 'none';
+        document.getElementById('adminReqSent').style.display = 'block';
+        document.getElementById('adminReqSent').innerHTML = `
+            <div style="text-align:center;padding:24px">
+                <div style="font-size:48px">✅</div>
+                <h3 style="margin:12px 0 8px">Access Granted!</h3>
+                <p style="opacity:.7;margin-bottom:20px">Your ID was verified automatically.</p>
+                <button onclick="location.reload()" style="background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:15px">Go to Admin Panel →</button>
+            </div>`;
+    } else {
+        document.getElementById('adminReqForm').style.display = 'none';
+        document.getElementById('adminReqSent').style.display = 'block';
+    }
 }
 
 // ── REPORT ───────────────────────────────────────────────────────────────────
@@ -2087,6 +2103,11 @@ async function _scanLoop() {
         try {
             const result = await sb.findItemInFrame(blob, _cameraRefBlob, _cameraQueryText);
             if (!_cameraScanning) return;
+
+            // Always show what word YOLO is actually searching for
+            if (result && result.label && result.label !== '?') {
+                document.getElementById('cameraTargetLabel').textContent = `🔍 Searching: "${result.label}"`;
+            }
 
             if (result && result.found && result.box) {
                 _cameraLastFound = true;
