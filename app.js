@@ -1609,7 +1609,6 @@ function closeAdminReqModal() {
 let _arIdDataUrl = null;
 
 function handleArIdFile(file) {
-    _checkAdminId(file);
     if (!file || !file.type.startsWith('image/')) return;
     const reader = new FileReader();
     reader.onload = e => {
