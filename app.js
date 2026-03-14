@@ -1667,9 +1667,24 @@ async function submitAdminRequest() {
                     <button onclick="location.reload()" style="background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:15px">Go to Admin Panel →</button>
                 </div>`;
         } else {
-            // Not recognized as ID — tell user clearly
-            if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
-            showToast('⚠️ Could not verify ID automatically. Make sure the card is clearly visible.');
+            // ID not auto-recognized — save as pending for manual review
+            await sb.submitAdminRequest({
+                uid,
+                role_title: 'staff',
+                reason: 'Staff ID submitted — awaiting manual review',
+                email: uid,
+                name: uid || 'unknown',
+                id_image_url: res.id_image_url || '',
+            });
+            document.getElementById('adminReqForm').style.display = 'none';
+            document.getElementById('adminReqSent').style.display = 'block';
+            document.getElementById('adminReqSent').innerHTML = `
+                <div style="text-align:center;padding:24px">
+                    <div style="font-size:48px">🕐</div>
+                    <h3 style="margin:12px 0 8px">Request Submitted</h3>
+                    <p style="opacity:.7;margin-bottom:8px">Your ID couldn't be verified automatically.</p>
+                    <p style="opacity:.7;margin-bottom:20px">An admin will review your request shortly.</p>
+                </div>`;
         }
     } catch(e) {
         if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
