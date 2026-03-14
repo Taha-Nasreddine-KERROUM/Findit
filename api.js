@@ -384,6 +384,7 @@ const sb = (() => {
     return {
         API_URL,
         API_BASE: API_URL,
+        getToken: () => _token,
         register, login,
         handleCallback, restoreSession, signOut, getMe,
         getProfileStats, getPostsByUser, getAllUsers, updateProfile,
