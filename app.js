@@ -1632,38 +1632,49 @@ async function submitAdminRequest() {
     if (!_arIdDataUrl) { showToast('Please upload your staff ID photo'); return; }
     const uid = document.getElementById('arUid')?.value.trim() || App.currentUser?.uid || '';
     const btn = document.getElementById('adminReqBtn');
-    if (btn) { btn.textContent = 'Uploading…'; btn.disabled = true; }
+    if (btn) { btn.textContent = 'Verifying ID…'; btn.disabled = true; }
 
-    // Upload the ID image
-    let idImageUrl = null;
-    idImageUrl = await sb.uploadImage(_arIdDataUrl, 'staff-ids');
-    if (!idImageUrl) {
+    try {
+        // Convert dataURL → blob
+        const [meta, b64] = _arIdDataUrl.split(',');
+        const mime = meta.match(/:(.*?);/)[1];
+        const bin  = atob(b64);
+        const arr  = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        const blob = new Blob([arr], { type: mime });
+
+        // Send image + uid in one multipart request
+        const form = new FormData();
+        form.append('file', blob, 'id.jpg');
+        form.append('uid', uid);
+
+        const r = await fetch(`${sb.API_URL}/admin/verify-id`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${sb.getToken()}` },
+            body: form,
+        });
+        const res = await r.json();
+
+        if (res.auto_approved) {
+            if (App.currentUser) App.currentUser.role = 'admin';
+            App.isAdmin = true;
+            document.getElementById('adminReqForm').style.display = 'none';
+            document.getElementById('adminReqSent').style.display = 'block';
+            document.getElementById('adminReqSent').innerHTML = `
+                <div style="text-align:center;padding:24px">
+                    <div style="font-size:48px">✅</div>
+                    <h3 style="margin:12px 0 8px">Access Granted!</h3>
+                    <p style="opacity:.7;margin-bottom:20px">Your ID was verified automatically.</p>
+                    <button onclick="location.reload()" style="background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:15px">Go to Admin Panel →</button>
+                </div>`;
+        } else {
+            // Not recognized as ID — tell user clearly
+            if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
+            showToast('⚠️ Could not verify ID automatically. Make sure the card is clearly visible.');
+        }
+    } catch(e) {
         if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
-        showToast('Could not upload image. Try again.');
-        return;
-    }
-
-    if (btn) btn.textContent = 'Verifying ID…';
-    const res = await sb.submitAdminRequest({ uid, role_title: 'staff', reason: 'Staff ID submitted', email: uid, name: uid || 'unknown', id_image_url: idImageUrl });
-    if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
-    if (!res || res._error) { showToast('Could not send request. Try again.'); return; }
-
-    if (res.auto_approved) {
-        // Update local user role so UI reflects admin immediately
-        if (App.currentUser) App.currentUser.role = 'admin';
-        showToast('✅ ID verified — admin access granted!');
-        document.getElementById('adminReqForm').style.display = 'none';
-        document.getElementById('adminReqSent').style.display = 'block';
-        document.getElementById('adminReqSent').innerHTML = `
-            <div style="text-align:center;padding:24px">
-                <div style="font-size:48px">✅</div>
-                <h3 style="margin:12px 0 8px">Access Granted!</h3>
-                <p style="opacity:.7;margin-bottom:20px">Your ID was verified automatically.</p>
-                <button onclick="location.reload()" style="background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:15px">Go to Admin Panel →</button>
-            </div>`;
-    } else {
-        document.getElementById('adminReqForm').style.display = 'none';
-        document.getElementById('adminReqSent').style.display = 'block';
+        showToast('Error submitting request. Please try again.');
     }
 }
 
