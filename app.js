@@ -2065,8 +2065,27 @@ function handleCameraRefImage(file) {
     _cameraRefBlob = file;
     const preview     = document.getElementById('cameraRefPreview');
     const placeholder = document.getElementById('cameraRefPlaceholder');
+    const removeBtn   = document.getElementById('cameraRefRemoveBtn');
     if (preview)     { preview.src = URL.createObjectURL(file); preview.style.display = 'block'; }
     if (placeholder) placeholder.style.display = 'none';
+    if (removeBtn)   removeBtn.style.display = 'block';
+    // Stop click on area from reopening file picker when image is set
+    document.getElementById('cameraRefArea').onclick = null;
+}
+
+function removeCameraRefImage(e) {
+    if (e) e.stopPropagation();
+    _cameraRefBlob = null;
+    const preview     = document.getElementById('cameraRefPreview');
+    const placeholder = document.getElementById('cameraRefPlaceholder');
+    const removeBtn   = document.getElementById('cameraRefRemoveBtn');
+    const input       = document.getElementById('cameraRefInput');
+    if (preview)     { preview.src = ''; preview.style.display = 'none'; }
+    if (placeholder) placeholder.style.display = 'block';
+    if (removeBtn)   removeBtn.style.display = 'none';
+    if (input)       input.value = '';
+    // Restore click handler
+    document.getElementById('cameraRefArea').onclick = () => document.getElementById('cameraRefInput').click();
 }
 
 function startCameraWithContext() { startCameraSearch(); }
