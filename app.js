@@ -1960,46 +1960,43 @@ function connectUserSSE(uid) {
 let _dotsAnimId = null;
 
 function _startDotsAnim(btn) {
-    // Two phases: snake (3 cycles) then circle (2 cycles), repeat
     const d1 = btn.querySelector('.dot1');
     const d2 = btn.querySelector('.dot2');
     const d3 = btn.querySelector('.dot3');
     if (!d1) return;
 
-    const snakeUp   = 'translateY(-5px)';
-    const snakeDown = 'translateY(0)';
-    const dur = 220; // ms per step
+    const R   = 6;   // triangle radius px
+    const dur = 180; // ms per step
 
+    // Snake: each dot hops up in sequence
+    const snakeSteps  = 9;  // 3 cycles × 3 steps
+    // Circle: triangle spins — 24 steps = 2 full rotations
+    const circleSteps = 24;
+    const total       = snakeSteps + circleSteps;
     let step = 0;
-    const totalSnakeSteps = 3 * 3; // 3 cycles × 3 dots
-    const totalCircleSteps = 2 * 12; // 2 full turns × 12 steps
-    const total = totalSnakeSteps + totalCircleSteps;
-
-    function applyCircle(angle, dot, offset) {
-        const a = angle + offset;
-        const x = Math.round(Math.cos(a) * 7);
-        const y = Math.round(Math.sin(a) * 5);
-        dot.style.transform = `translate(${x}px,${y}px)`;
-    }
 
     function tick() {
         const phase = step % total;
-        if (phase < totalSnakeSteps) {
-            // Snake phase
-            const cycle = Math.floor(phase / 3);
+
+        if (phase < snakeSteps) {
+            // ── Snake ──────────────────────────────────────────────
             const which = phase % 3;
-            d1.style.transform = which === 0 ? snakeUp : snakeDown;
-            d2.style.transform = which === 1 ? snakeUp : snakeDown;
-            d3.style.transform = which === 2 ? snakeUp : snakeDown;
-            d1.style.transition = d2.style.transition = d3.style.transition = `transform ${dur}ms ease`;
+            [d1, d2, d3].forEach((d, i) => {
+                d.style.transition = `transform ${dur}ms ease`;
+                d.style.transform  = i === which ? 'translateY(-5px)' : 'translateY(0)';
+            });
         } else {
-            // Circle phase
-            const cStep = phase - totalSnakeSteps;
-            const angle = (cStep / totalCircleSteps) * 2 * Math.PI * 2; // 2 full rotations
-            applyCircle(angle, d1, 0);
-            applyCircle(angle, d2, (2 * Math.PI) / 3);
-            applyCircle(angle, d3, (4 * Math.PI) / 3);
+            // ── Circle: 3 dots locked as a spinning triangle ───────
+            const angle = ((phase - snakeSteps) / circleSteps) * 2 * Math.PI * 2;
+            [d1, d2, d3].forEach((d, i) => {
+                const a = angle + (i * 2 * Math.PI) / 3;
+                const x = +(Math.cos(a) * R).toFixed(1);
+                const y = +(Math.sin(a) * R).toFixed(1);
+                d.style.transition = `transform ${dur}ms linear`;
+                d.style.transform  = `translate(${x}px, ${y}px)`;
+            });
         }
+
         step++;
         _dotsAnimId = setTimeout(tick, dur);
     }
@@ -2008,8 +2005,10 @@ function _startDotsAnim(btn) {
 
 function _stopDotsAnim(btn) {
     if (_dotsAnimId) { clearTimeout(_dotsAnimId); _dotsAnimId = null; }
-    const dots = btn.querySelectorAll('.dot1,.dot2,.dot3');
-    dots.forEach(d => { d.style.transform = ''; d.style.transition = ''; });
+    btn.querySelectorAll('.dot1,.dot2,.dot3').forEach(d => {
+        d.style.transform = '';
+        d.style.transition = '';
+    });
 }
 
 async function triggerAutoFill() {
