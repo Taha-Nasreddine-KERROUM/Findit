@@ -566,6 +566,17 @@
                 <input class="login-input" type="text" id="regName" placeholder="Display name (e.g. Khalid)" onkeydown="if(event.key==='Enter')document.getElementById('regUid').focus()">
                 <input class="login-input" type="text" id="regUid" placeholder="Username (letters, numbers, _)" autocomplete="username" style="margin-top:8px" onkeydown="if(event.key==='Enter')document.getElementById('regPw').focus()">
                 <input class="login-input" type="password" id="regPw" placeholder="Password (min 6 characters)" autocomplete="new-password" style="margin-top:8px" onkeydown="if(event.key==='Enter')doRegister()">
+                <!-- Optional ID upload -->
+                <div style="margin-top:14px">
+                    <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px">University ID <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional — unlocks Student / Staff badge)</span></div>
+                    <div id="regIdArea" onclick="document.getElementById('regIdInput').click()"
+                         style="border:1.5px dashed var(--border);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:border-color .2s;display:flex;align-items:center;justify-content:center;gap:10px;min-height:52px">
+                        <span id="regIdPlaceholder" style="font-size:12px;color:var(--muted)">📎 Tap to upload your university ID</span>
+                        <img id="regIdPreview" style="display:none;max-height:44px;border-radius:6px;max-width:120px;object-fit:contain">
+                        <button id="regIdRemoveBtn" onclick="removeRegId(event)" style="display:none;background:rgba(255,80,80,.12);color:#ff6b6b;border:1px solid rgba(255,80,80,.25);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">✕</button>
+                    </div>
+                    <input id="regIdInput" type="file" accept="image/*" style="display:none" onchange="handleRegIdFile(this.files[0])">
+                </div>
                 <div id="registerError" style="display:none;color:#e05a5a;font-size:12px;margin-top:6px;text-align:center"></div>
                 <button class="btn-full btn-submit" onclick="doRegister()" style="margin-top:12px" id="registerBtn">Create account</button>
             </div>
@@ -598,9 +609,9 @@
     </div>
 </div>
 
-<script src="api.js?v=20250326"></script>
-<script src="data.js?v=20250326"></script>
-<script src="app.js?v=20250326"></script>
+<script src="api.js?v=20250327"></script>
+<script src="data.js?v=20250327"></script>
+<script src="app.js?v=20250327"></script>
 <!-- ── ADMIN REQUEST MODAL ── -->
 <div class="modal-bg" id="adminReqModal" onclick="if(event.target===this)closeAdminReqModal()">
     <div class="modal-box" style="max-width:360px;padding:28px 24px">
