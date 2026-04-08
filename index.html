@@ -413,8 +413,8 @@
         <div class="form-group" style="margin-bottom:11px">
             <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">
                 <span>Photo <span style="color:var(--muted);font-weight:400">(optional)</span></span>
-                <button id="autoFillBtn" onclick="triggerAutoFill()" style="display:none;background:rgba(91,141,255,.15);color:var(--accent);border:1px solid rgba(91,141,255,.3);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">
-                    ✨ Auto-fill with AI
+                <button id="autoFillBtn" onclick="triggerAutoFill()" style="display:none;background:rgba(91,141,255,.15);color:var(--accent);border:1px solid rgba(91,141,255,.3);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;display:none;align-items:center;gap:3px">
+                    <span class="dot1" style="display:inline-block;width:4px;height:4px;border-radius:50%;background:currentColor"></span><span class="dot2" style="display:inline-block;width:4px;height:4px;border-radius:50%;background:currentColor"></span><span class="dot3" style="display:inline-block;width:4px;height:4px;border-radius:50%;background:currentColor"></span>&nbsp;Auto-fill with AI
                 </button>
             </label>
             <div class="upload-area" id="uploadArea" onclick="document.getElementById('postImageInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleImageDrop(event)">
@@ -598,9 +598,9 @@
     </div>
 </div>
 
-<script src="api.js?v=20250322"></script>
-<script src="data.js?v=20250322"></script>
-<script src="app.js?v=20250322"></script>
+<script src="api.js?v=20250323"></script>
+<script src="data.js?v=20250323"></script>
+<script src="app.js?v=20250323"></script>
 <!-- ── ADMIN REQUEST MODAL ── -->
 <div class="modal-bg" id="adminReqModal" onclick="if(event.target===this)closeAdminReqModal()">
     <div class="modal-box" style="max-width:360px;padding:28px 24px">
