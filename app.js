@@ -218,6 +218,7 @@ function mapRow(r) {
         comments:      Number(r.comment_count) || 0,
         hasImage:      !!r.image_url,
         _imageUrl:     r.image_url ? (r.image_url.startsWith('http') ? r.image_url : sb.API_BASE + r.image_url) : null,
+        ownerBadge:    r.author_badge    || '',
         _raw_ts:       r.created_at || '',
     };
 }
@@ -294,7 +295,7 @@ function buildCard(post) {
              onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">${post.ownerInitials}</div>
         <div class="card-meta">
           <span class="location-tag" onclick="openLocation('${safeLocation}')">${post.location}</span>
-          <span class="username" onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">u/${post.owner}${post.ownerRole==='super_admin'?'<span class="badge-verified gold" title="Super Admin">✓</span>':post.ownerRole==='admin'?'<span class="badge-verified purple" title="Admin">✓</span>':''}</span>
+          <span class="username" onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">u/${post.owner}${post.ownerRole==='super_admin'?'<span class="badge-verified gold" title="Super Admin">✓</span>':post.ownerRole==='admin'?'<span class="badge-verified purple" title="Admin">✓</span>':''}${post.ownerBadge==='student'?'<span style="font-size:10px;background:rgba(91,141,255,.15);color:#5b8dff;border:1px solid rgba(91,141,255,.3);border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">🎓 Student</span>':post.ownerBadge==='staff'?'<span style="font-size:10px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">🏫 Staff</span>':''}</span>
         </div>
         <div class="card-right">
           <div class="card-status-row">
@@ -939,11 +940,18 @@ async function openProfile(name, initials, color, uid, profileId) {
     const pvb = document.getElementById('pVerifiedBadge');
     if (pvb) {
         const r = stats.role;
-        pvb.innerHTML = r === 'super_admin'
+        const b = stats.badge;
+        const roleBadge = r === 'super_admin'
             ? '<span class="badge-verified gold" title="Super Admin" style="margin-left:5px">✓</span>'
             : r === 'admin'
             ? '<span class="badge-verified purple" title="Admin" style="margin-left:5px">✓</span>'
             : '';
+        const userBadge = b === 'student'
+            ? '<span style="font-size:11px;background:rgba(91,141,255,.15);color:#5b8dff;border:1px solid rgba(91,141,255,.3);border-radius:5px;padding:2px 7px;margin-left:6px;vertical-align:middle">🎓 Student</span>'
+            : b === 'staff'
+            ? '<span style="font-size:11px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:5px;padding:2px 7px;margin-left:6px;vertical-align:middle">🏫 Staff</span>'
+            : '';
+        pvb.innerHTML = roleBadge + userBadge;
     }
     document.getElementById('pStatPosted').textContent   = stats.postCount;
     document.getElementById('pStatReturned').textContent = (posts || []).filter(p => p.status === 'recovered').length;
@@ -1543,6 +1551,29 @@ async function doLogin() {
     await afterAuth(res);
 }
 
+let _regIdFile = null;
+
+function handleRegIdFile(file) {
+    if (!file) return;
+    _regIdFile = file;
+    document.getElementById('regIdPreview').src = URL.createObjectURL(file);
+    document.getElementById('regIdPreview').style.display = 'block';
+    document.getElementById('regIdPlaceholder').style.display = 'none';
+    document.getElementById('regIdRemoveBtn').style.display = 'inline-block';
+    document.getElementById('regIdArea').onclick = null;
+}
+
+function removeRegId(e) {
+    if (e) e.stopPropagation();
+    _regIdFile = null;
+    document.getElementById('regIdPreview').src = '';
+    document.getElementById('regIdPreview').style.display = 'none';
+    document.getElementById('regIdPlaceholder').style.display = '';
+    document.getElementById('regIdRemoveBtn').style.display = 'none';
+    document.getElementById('regIdInput').value = '';
+    document.getElementById('regIdArea').onclick = () => document.getElementById('regIdInput').click();
+}
+
 async function doRegister() {
     const name = document.getElementById('regName').value.trim();
     const uid  = document.getElementById('regUid').value.trim();
@@ -1551,14 +1582,40 @@ async function doRegister() {
     err.style.display = 'none';
     if (!uid || !pw) { err.textContent='Fill in all fields'; err.style.display=''; return; }
     const btn = document.getElementById('registerBtn');
-    btn.textContent='Creating…'; btn.disabled=true;
-    const res = await sb.register(uid, pw, name || uid);
-    btn.textContent='Create account'; btn.disabled=false;
-    if (!res || res._error) {
-        err.textContent = res?._error || 'Could not reach server';
-        err.style.display=''; return;
+    btn.textContent = _regIdFile ? 'Verifying ID…' : 'Creating…';
+    btn.disabled = true;
+
+    try {
+        const form = new FormData();
+        form.append('uid', uid);
+        form.append('password', pw);
+        form.append('name', name || uid);
+        if (_regIdFile) form.append('id_file', _regIdFile, 'id.jpg');
+
+        const r = await fetch(`${sb.API_URL}/auth/register-with-id`, {
+            method: 'POST',
+            body: form,
+        });
+        const res = await r.json();
+
+        if (!r.ok || res._error || res.detail) {
+            err.textContent = res.detail || res._error || 'Could not create account';
+            err.style.display = ''; return;
+        }
+
+        // Show badge toast if detected
+        if (res.badge && res.badge !== 'none') {
+            const label = res.badge === 'student' ? '🎓 Student' : res.badge === 'staff' ? '🏫 Staff' : '✅ Verified';
+            showToast(`${label} badge added to your profile!`);
+        }
+        await afterAuth(res);
+    } catch(e) {
+        err.textContent = 'Could not reach server';
+        err.style.display = '';
+    } finally {
+        btn.textContent = 'Create account';
+        btn.disabled = false;
     }
-    await afterAuth(res);
 }
 
 async function afterAuth(res) {
