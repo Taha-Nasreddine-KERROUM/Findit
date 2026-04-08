@@ -1965,35 +1965,39 @@ function _startDotsAnim(btn) {
     const d3 = btn.querySelector('.dot3');
     if (!d1) return;
 
-    const R   = 6;   // triangle radius px
-    const dur = 180; // ms per step
-
-    // Snake: each dot hops up in sequence
-    const snakeSteps  = 9;  // 3 cycles × 3 steps
-    // Circle: triangle spins — 24 steps = 2 full rotations
+    // Phase 1: snake (9 steps = 3 cycles of 3)
+    // Phase 2: spinner — dots orbit as a triangle, brightness trails like a real spinner (24 steps = 2 rotations)
+    const snakeSteps  = 9;
     const circleSteps = 24;
     const total       = snakeSteps + circleSteps;
-    let step = 0;
+    const R   = 6;    // orbit radius px
+    const dur = 160;
+    let step  = 0;
 
     function tick() {
         const phase = step % total;
 
         if (phase < snakeSteps) {
-            // ── Snake ──────────────────────────────────────────────
+            // ── Snake: one dot hops up at a time ──────────────────
             const which = phase % 3;
             [d1, d2, d3].forEach((d, i) => {
-                d.style.transition = `transform ${dur}ms ease`;
+                d.style.transition = `transform ${dur}ms ease, opacity ${dur}ms`;
                 d.style.transform  = i === which ? 'translateY(-5px)' : 'translateY(0)';
+                d.style.opacity    = '1';
             });
         } else {
-            // ── Circle: 3 dots locked as a spinning triangle ───────
-            const angle = ((phase - snakeSteps) / circleSteps) * 2 * Math.PI * 2;
+            // ── Spinner: triangle orbits, brightness trails ────────
+            const t = (phase - snakeSteps) / circleSteps; // 0→1 over 2 full rotations
+            const angle = t * 2 * Math.PI * 2;            // 2 full turns
             [d1, d2, d3].forEach((d, i) => {
                 const a = angle + (i * 2 * Math.PI) / 3;
-                const x = +(Math.cos(a) * R).toFixed(1);
-                const y = +(Math.sin(a) * R).toFixed(1);
-                d.style.transition = `transform ${dur}ms linear`;
+                const x = +(Math.cos(a) * R).toFixed(2);
+                const y = +(Math.sin(a) * R).toFixed(2);
+                // Brightness: dot at "front" (angle≈0) is brightest
+                const bright = 0.35 + 0.65 * ((Math.cos(a - angle) + 1) / 2);
+                d.style.transition = `transform ${dur}ms linear, opacity ${dur}ms linear`;
                 d.style.transform  = `translate(${x}px, ${y}px)`;
+                d.style.opacity    = bright.toFixed(2);
             });
         }
 
@@ -2006,8 +2010,9 @@ function _startDotsAnim(btn) {
 function _stopDotsAnim(btn) {
     if (_dotsAnimId) { clearTimeout(_dotsAnimId); _dotsAnimId = null; }
     btn.querySelectorAll('.dot1,.dot2,.dot3').forEach(d => {
-        d.style.transform = '';
+        d.style.transform  = '';
         d.style.transition = '';
+        d.style.opacity    = '';
     });
 }
 
