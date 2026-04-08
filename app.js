@@ -1240,7 +1240,7 @@ function handleImageDrop(e) {
 function showImagePreview(dataUrl) {
     postImageDataUrl = dataUrl;
     const btn = document.getElementById('autoFillBtn');
-    if (btn) btn.style.display = '';
+    if (btn) btn.style.display = 'inline-flex';
     document.getElementById('uploadPlaceholder').style.display='none';
     document.getElementById('uploadPreviewWrap').style.display='block';
     document.getElementById('uploadPreview').src=dataUrl;
@@ -1957,23 +1957,78 @@ function connectUserSSE(uid) {
 // ── F-A: AUTO-FILL FROM PHOTO ─────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 
+let _dotsAnimId = null;
 
+function _startDotsAnim(btn) {
+    // Two phases: snake (3 cycles) then circle (2 cycles), repeat
+    const d1 = btn.querySelector('.dot1');
+    const d2 = btn.querySelector('.dot2');
+    const d3 = btn.querySelector('.dot3');
+    if (!d1) return;
+
+    const snakeUp   = 'translateY(-5px)';
+    const snakeDown = 'translateY(0)';
+    const dur = 220; // ms per step
+
+    let step = 0;
+    const totalSnakeSteps = 3 * 3; // 3 cycles × 3 dots
+    const totalCircleSteps = 2 * 12; // 2 full turns × 12 steps
+    const total = totalSnakeSteps + totalCircleSteps;
+
+    function applyCircle(angle, dot, offset) {
+        const a = angle + offset;
+        const x = Math.round(Math.cos(a) * 7);
+        const y = Math.round(Math.sin(a) * 5);
+        dot.style.transform = `translate(${x}px,${y}px)`;
+    }
+
+    function tick() {
+        const phase = step % total;
+        if (phase < totalSnakeSteps) {
+            // Snake phase
+            const cycle = Math.floor(phase / 3);
+            const which = phase % 3;
+            d1.style.transform = which === 0 ? snakeUp : snakeDown;
+            d2.style.transform = which === 1 ? snakeUp : snakeDown;
+            d3.style.transform = which === 2 ? snakeUp : snakeDown;
+            d1.style.transition = d2.style.transition = d3.style.transition = `transform ${dur}ms ease`;
+        } else {
+            // Circle phase
+            const cStep = phase - totalSnakeSteps;
+            const angle = (cStep / totalCircleSteps) * 2 * Math.PI * 2; // 2 full rotations
+            applyCircle(angle, d1, 0);
+            applyCircle(angle, d2, (2 * Math.PI) / 3);
+            applyCircle(angle, d3, (4 * Math.PI) / 3);
+        }
+        step++;
+        _dotsAnimId = setTimeout(tick, dur);
+    }
+    tick();
+}
+
+function _stopDotsAnim(btn) {
+    if (_dotsAnimId) { clearTimeout(_dotsAnimId); _dotsAnimId = null; }
+    const dots = btn.querySelectorAll('.dot1,.dot2,.dot3');
+    dots.forEach(d => { d.style.transform = ''; d.style.transition = ''; });
+}
 
 async function triggerAutoFill() {
     if (!postImageDataUrl) return;
     const btn = document.getElementById('autoFillBtn');
-    btn.textContent = '⏳ Analysing image…'; btn.disabled = true;
+    btn.disabled = true;
+    _startDotsAnim(btn);
 
     try {
-        // convert dataUrl to blob/file
-        const res  = await fetch(postImageDataUrl);
-        const blob = await res.blob();
-        const file = new File([blob], 'photo.jpg', { type: blob.type || 'image/jpeg' });
+        const res    = await fetch(postImageDataUrl);
+        const blob   = await res.blob();
+        const file   = new File([blob], 'photo.jpg', { type: blob.type || 'image/jpeg' });
+        const status   = document.getElementById('postStatus')?.value   || 'lost';
+        const location = document.getElementById('postLocation')?.value || '';
 
-        const result = await sb.describeImage(file);
+        const result = await sb.describeImage(file, status, location);
 
         if (!result || (!result.title && !result.description)) {
-            showToast('⚠️ Could not analyse image — Florence-2 may still be loading on the server. Try again in 30s.');
+            showToast('⚠️ Could not analyse image — Florence-2 may still be loading. Try again in 30s.');
             return;
         }
 
@@ -1981,12 +2036,10 @@ async function triggerAutoFill() {
         const descEl  = document.getElementById('postDesc');
         const catEl   = document.getElementById('postCategory');
 
-        // Always fill — overwrite so user can see what AI detected
         if (result.title)       titleEl.value = result.title;
         if (result.description) descEl.value  = result.description;
-        if (result.category) {
-            const opts  = [...catEl.options];
-            const match = opts.find(o => o.value === result.category || o.text === result.category);
+        if (result.category && catEl) {
+            const match = [...catEl.options].find(o => o.value === result.category || o.text === result.category);
             if (match) catEl.value = match.value;
         }
 
@@ -1994,7 +2047,8 @@ async function triggerAutoFill() {
     } catch(e) {
         showToast('Auto-fill failed: ' + e.message);
     } finally {
-        btn.textContent = '✨ Auto-fill with AI'; btn.disabled = false;
+        _stopDotsAnim(btn);
+        btn.disabled = false;
     }
 }
 
