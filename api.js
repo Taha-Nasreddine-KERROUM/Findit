@@ -235,9 +235,11 @@ const sb = (() => {
      * F-A: Auto-fill post form from photo using Florence-2.
      * Returns {title, description, category}
      */
-    async function describeImage(file) {
+    async function describeImage(file, status = 'lost', location = '') {
         const form = new FormData();
         form.append('file', file);
+        form.append('status', status);
+        form.append('location', location);
         try {
             const r = await fetch(`${API_URL}/ai/describe-image`, {
                 method: 'POST',
