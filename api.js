@@ -61,9 +61,11 @@ const sb = (() => {
         if (!_token) return null;
         const res = await api('/auth/me');
         if (!res || res._error) {
-            _token = null;
-            localStorage.removeItem('fi_token');
-            // If banned, show message
+            // Only clear token on explicit auth failure (401), not network errors
+            if (res?._status === 401) {
+                _token = null;
+                localStorage.removeItem('fi_token');
+            }
             if (res?._status === 403) return { _banned: true };
             return null;
         }
