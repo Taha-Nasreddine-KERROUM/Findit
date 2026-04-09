@@ -386,7 +386,7 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=20250330"></script>
+<script src="api.js?v=20250333"></script>
 <script>
   // ── STATE ──────────────────────────────────────────────────────────────────────
   let ME = null;
@@ -413,12 +413,18 @@
 
     overlay.remove();
 
-    if (!me) { window.location.href = 'index.html'; return; }
+    if (!me) {
+      // Not signed in — go back and auto-open login
+      window.location.href = 'index.html?relogin=1';
+      return;
+    }
     if (me._banned) { window.location.href = 'index.html'; return; }
 
     const role = me.profile?.role || me.role;
     if (!['admin','super_admin'].includes(role)) {
-      window.location.href = 'index.html'; return;
+      // Signed in but not admin yet — go back
+      window.location.href = 'index.html';
+      return;
     }
     boot(me);
   })();
@@ -504,9 +510,11 @@
     if (id === 'reports')  { loadReports(); clearBadge('reportsBadge'); }
     if (id === 'logs')     loadLogs();
   }
+  const _dismissedBadges = new Set();
   function clearBadge(id) {
     const b = document.getElementById(id);
     if (b) { b.style.display = 'none'; b.textContent = '0'; }
+    _dismissedBadges.add(id);  // remember — don't re-show this session
   }
 
   function refreshCurrent() {
@@ -523,12 +531,12 @@
     document.getElementById('st-banned').textContent  = stats.bannedUsers;
     document.getElementById('st-admins').textContent  = stats.admins;
     document.getElementById('st-pending').textContent = stats.pendingRequests;
-    if (stats.pendingRequests > 0) {
+    if (stats.pendingRequests > 0 && !_dismissedBadges.has('reqBadge')) {
       const b = document.getElementById('reqBadge');
       b.textContent = stats.pendingRequests;
       b.style.display = '';
     }
-    if (stats.reportedPosts > 0) {
+    if (stats.reportedPosts > 0 && !_dismissedBadges.has('reportsBadge')) {
       const b = document.getElementById('reportsBadge');
       b.textContent = stats.reportedPosts;
       b.style.display = '';
