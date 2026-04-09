@@ -386,7 +386,7 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="api.js?v=20250321"></script>
+<script src="api.js?v=20250330"></script>
 <script>
   // ── STATE ──────────────────────────────────────────────────────────────────────
   let ME = null;
@@ -397,7 +397,12 @@
 
   // ── BOOT ──────────────────────────────────────────────────────────────────────
   (async () => {
-    const me = await sb.restoreSession();
+    let me = await sb.restoreSession();
+    // Retry once — Space may still be booting or had a transient network error
+    if (!me) {
+      await new Promise(r => setTimeout(r, 1500));
+      me = await sb.restoreSession();
+    }
     if (!me) { window.location.href = 'index.html'; return; }
     const role = me.profile?.role || me.role;
     if (!['admin','super_admin'].includes(role)) {
