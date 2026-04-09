@@ -33,6 +33,11 @@ const App = {
     initFilters();
     renderFeed();
     startPolling();
+    // If redirected from admin panel after session loss, open login automatically
+    if (new URLSearchParams(window.location.search).get('relogin') === '1') {
+        history.replaceState({}, '', window.location.pathname);
+        setTimeout(() => { openLogin(); showToast('Please sign in again to access the admin panel.'); }, 500);
+    }
 })();
 
 // ── LIVE POLLING ───────────────────────────────────────────────────────────────
@@ -224,7 +229,6 @@ function mapRow(r) {
 }
 
 function setUser(me) {
-    // Accept both {profile:{...}} and flat profile object
     const p = me.profile || me;
     App.isLoggedIn   = true;
     App.currentUser  = {
@@ -234,10 +238,10 @@ function setUser(me) {
         initials: p.initials,
         color:    p.color,
         role:     p.role,
+        badge:    p.badge || 'none',
     };
     App.isAdmin      = ['admin','super_admin'].includes(p.role);
     App.isSuperAdmin = p.role === 'super_admin';
-    // Connect DM SSE + user SSE for this user
     connectDMSSE(p.uid);
     connectUserSSE(p.uid);
 }
@@ -535,9 +539,15 @@ function updateMenuState() {
         document.getElementById('menuUserName').textContent      = App.currentUser.name;
         document.getElementById('menuUserHandle').textContent    = 'u/'+App.currentUser.uid;
         const adminSection = document.getElementById('adminMenuSection');
-    if (adminSection) adminSection.style.display = App.isAdmin ? '' : 'none';
-    const reqAdminItem = document.getElementById('reqAdminMenuItem');
-    if (reqAdminItem) reqAdminItem.style.display = App.isAdmin ? 'none' : '';
+        if (adminSection) adminSection.style.display = App.isAdmin ? '' : 'none';
+        const reqAdminItem = document.getElementById('reqAdminMenuItem');
+        if (reqAdminItem) reqAdminItem.style.display = App.isAdmin ? 'none' : '';
+        // Verify / Change Status
+        const badge = App.currentUser?.badge || 'none';
+        const verifyItem = document.getElementById('verifyMenuItem');
+        const changeItem = document.getElementById('changeStatusMenuItem');
+        if (verifyItem) verifyItem.style.display = (badge === 'none') ? '' : 'none';
+        if (changeItem) changeItem.style.display = (badge !== 'none') ? '' : 'none';
     }
 }
 
@@ -1714,8 +1724,8 @@ async function submitAdminRequest() {
         if (res.auto_approved) {
             if (App.currentUser) App.currentUser.role = 'admin';
             App.isAdmin = true;
-            // Store token explicitly so admin.html picks it up after navigation
             if (sb.getToken()) localStorage.setItem('fi_token', sb.getToken());
+            updateMenuState();  // show Admin Dashboard instantly, no refresh needed
             document.getElementById('adminReqForm').style.display = 'none';
             document.getElementById('adminReqSent').style.display = 'block';
             document.getElementById('adminReqSent').innerHTML = `
@@ -2342,10 +2352,93 @@ function _setCameraStatus(state, text) {
 // ── F-D: AI ADMIN ID CHECK ────────────────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ── VERIFY YOURSELF MODAL ────────────────────────────────────────────────────
+let _verifyIdFile = null;
 
-async function _checkAdminId(file) {
-    const btn = document.getElementById('adminReqBtn');
-    if (btn) { btn.textContent = 'Checking ID…'; btn.disabled = true; }
+function openVerifyModal() {
+    toggleMenu();
+    _verifyIdFile = null;
+    document.getElementById('verifyIdPreview').style.display = 'none';
+    document.getElementById('verifyIdPlaceholder').style.display = '';
+    document.getElementById('verifyIdRemoveBtn').style.display = 'none';
+    document.getElementById('verifyIdInput').value = '';
+    document.getElementById('verifyResult').style.display = 'none';
+    document.getElementById('verifySubmitBtn').textContent = 'Verify';
+    document.getElementById('verifySubmitBtn').disabled = false;
+    document.getElementById('verifyIdArea').onclick = () => document.getElementById('verifyIdInput').click();
+    document.getElementById('verifyModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeVerifyModal() {
+    document.getElementById('verifyModal').classList.remove('open');
+    document.body.style.overflow = '';
+    _verifyIdFile = null;
+}
+
+function handleVerifyIdFile(file) {
+    if (!file) return;
+    _verifyIdFile = file;
+    document.getElementById('verifyIdPreview').src = URL.createObjectURL(file);
+    document.getElementById('verifyIdPreview').style.display = 'block';
+    document.getElementById('verifyIdPlaceholder').style.display = 'none';
+    document.getElementById('verifyIdRemoveBtn').style.display = 'block';
+    document.getElementById('verifyIdArea').onclick = null;
+}
+
+function removeVerifyId(e) {
+    if (e) e.stopPropagation();
+    _verifyIdFile = null;
+    document.getElementById('verifyIdPreview').src = '';
+    document.getElementById('verifyIdPreview').style.display = 'none';
+    document.getElementById('verifyIdPlaceholder').style.display = '';
+    document.getElementById('verifyIdRemoveBtn').style.display = 'none';
+    document.getElementById('verifyIdInput').value = '';
+    document.getElementById('verifyIdArea').onclick = () => document.getElementById('verifyIdInput').click();
+}
+
+async function submitVerifyId() {
+    if (!_verifyIdFile) { showToast('Please upload your university ID first'); return; }
+    const btn = document.getElementById('verifySubmitBtn');
+    const resultEl = document.getElementById('verifyResult');
+    btn.textContent = 'Verifying…'; btn.disabled = true;
+    resultEl.style.display = 'none';
+
+    try {
+        const form = new FormData();
+        form.append('file', _verifyIdFile, 'id.jpg');
+        const r = await fetch(`${sb.API_URL}/auth/verify-badge`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${sb.getToken()}` },
+            body: form,
+        });
+        const res = await r.json();
+
+        if (res.ok && res.badge !== 'none') {
+            // Update local user badge instantly
+            if (App.currentUser) App.currentUser.badge = res.badge;
+            updateMenuState();
+            resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(34,201,122,.1);color:#22c97a;border:1px solid rgba(34,201,122,.25)';
+            resultEl.textContent = res.message;
+            btn.textContent = 'Done';
+            btn.disabled = false;
+            btn.onclick = closeVerifyModal;
+            showToast(res.message);
+        } else {
+            resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(255,80,80,.1);color:#ff6b6b;border:1px solid rgba(255,80,80,.25)';
+            resultEl.textContent = res.message || 'Could not verify ID. Make sure the card is clearly visible.';
+            btn.textContent = 'Try Again';
+            btn.disabled = false;
+        }
+    } catch(e) {
+        resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(255,80,80,.1);color:#ff6b6b;border:1px solid rgba(255,80,80,.25)';
+        resultEl.textContent = 'Connection error. Please try again.';
+        btn.textContent = 'Try Again';
+        btn.disabled = false;
+    }
+}
+
+
 
     const result = await sb.checkIdImage(file);
 
