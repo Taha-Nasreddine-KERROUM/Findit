@@ -1721,7 +1721,7 @@ async function submitAdminRequest() {
                     <div style="font-size:48px">✅</div>
                     <h3 style="margin:12px 0 8px">Access Granted!</h3>
                     <p style="opacity:.7;margin-bottom:20px">Your ID was verified automatically.</p>
-                    <button onclick="location.reload()" style="background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:15px">Go to Admin Panel →</button>
+                    <button onclick="window.location.href='admin.html'" style="background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:15px">Go to Admin Panel →</button>
                 </div>`;
         } else {
             // ID not auto-recognized — save as pending for manual review
