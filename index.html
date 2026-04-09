@@ -112,6 +112,9 @@
             </div>
         </div>
         <div class="menu-divider"></div>
+        <div id="verifyMenuItem" class="menu-item" onclick="openVerifyModal()" style="display:none">🎓 Verify Yourself</div>
+        <div id="changeStatusMenuItem" class="menu-item" onclick="openVerifyModal()" style="display:none">🔄 Change Status</div>
+        <div class="menu-divider"></div>
         <div class="menu-item" onclick="signOut()">Sign out</div>
         <div id="reqAdminMenuItem" class="menu-item" onclick="openAdminRequestModal()">Request Admin Access</div>
     </div>
@@ -609,9 +612,9 @@
     </div>
 </div>
 
-<script src="api.js?v=20250332"></script>
-<script src="data.js?v=20250332"></script>
-<script src="app.js?v=20250332"></script>
+<script src="api.js?v=20250333"></script>
+<script src="data.js?v=20250333"></script>
+<script src="app.js?v=20250333"></script>
 <!-- ── ADMIN REQUEST MODAL ── -->
 <div class="modal-bg" id="adminReqModal" onclick="if(event.target===this)closeAdminReqModal()">
     <div class="modal-box" style="max-width:360px;padding:28px 24px">
@@ -666,6 +669,25 @@
 </div>
 
 <!-- ── REPORT MODAL ── -->
+<div class="modal-bg" id="verifyModal" onclick="if(event.target===this)closeVerifyModal()">
+    <div class="modal-box" style="max-width:360px">
+        <div style="font-size:17px;font-weight:700;margin-bottom:4px">Verify Your Identity</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Upload your university ID to get a Student or Staff badge on your profile.</div>
+        <div id="verifyIdArea" onclick="document.getElementById('verifyIdInput').click()"
+             style="border:1.5px dashed var(--border);border-radius:10px;padding:16px;text-align:center;cursor:pointer;margin-bottom:8px;min-height:70px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px">
+            <div id="verifyIdPlaceholder">
+                <div style="font-size:22px">📎</div>
+                <div style="font-size:12px;color:var(--muted)">Tap to upload your university ID</div>
+            </div>
+            <img id="verifyIdPreview" style="display:none;max-height:80px;border-radius:6px;max-width:100%;object-fit:contain">
+        </div>
+        <button id="verifyIdRemoveBtn" onclick="removeVerifyId(event)" style="display:none;width:100%;margin-bottom:10px;background:rgba(255,80,80,.12);color:#ff6b6b;border:1px solid rgba(255,80,80,.25);border-radius:8px;padding:6px;font-size:12px;cursor:pointer">✕ Remove photo</button>
+        <input id="verifyIdInput" type="file" accept="image/*" style="display:none" onchange="handleVerifyIdFile(this.files[0])">
+        <div id="verifyResult" style="display:none;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center"></div>
+        <button id="verifySubmitBtn" onclick="submitVerifyId()" style="width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:600;cursor:pointer">Verify</button>
+    </div>
+</div>
+
 <div class="modal-bg" id="reportModal" onclick="if(event.target===this)closeReport()">
     <div class="modal-box" style="max-width:340px">
         <div class="modal-title">Report Post</div>
