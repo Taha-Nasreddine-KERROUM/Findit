@@ -1714,6 +1714,8 @@ async function submitAdminRequest() {
         if (res.auto_approved) {
             if (App.currentUser) App.currentUser.role = 'admin';
             App.isAdmin = true;
+            // Store token explicitly so admin.html picks it up after navigation
+            if (sb.getToken()) localStorage.setItem('fi_token', sb.getToken());
             document.getElementById('adminReqForm').style.display = 'none';
             document.getElementById('adminReqSent').style.display = 'block';
             document.getElementById('adminReqSent').innerHTML = `
@@ -1724,15 +1726,8 @@ async function submitAdminRequest() {
                     <button onclick="window.location.href='admin.html'" style="background:var(--accent);color:#fff;border:none;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:15px">Go to Admin Panel →</button>
                 </div>`;
         } else {
-            // ID not auto-recognized — save as pending for manual review
-            await sb.submitAdminRequest({
-                uid,
-                role_title: 'staff',
-                reason: 'Staff ID submitted — awaiting manual review',
-                email: uid,
-                name: uid || 'unknown',
-                id_image_url: res.id_image_url || '',
-            });
+            // Backend already saved the pending request with the image
+            // No second call needed
             document.getElementById('adminReqForm').style.display = 'none';
             document.getElementById('adminReqSent').style.display = 'block';
             document.getElementById('adminReqSent').innerHTML = `
