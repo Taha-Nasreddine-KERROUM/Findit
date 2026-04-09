@@ -397,13 +397,25 @@
 
   // ── BOOT ──────────────────────────────────────────────────────────────────────
   (async () => {
-    let me = await sb.restoreSession();
-    // Retry once — Space may still be booting or had a transient network error
-    if (!me) {
-      await new Promise(r => setTimeout(r, 1500));
+    // Show loading overlay while checking session
+    const overlay = document.createElement('div');
+    overlay.id = 'bootOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:#0d0d0d;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;z-index:99999';
+    overlay.innerHTML = '<div style="width:32px;height:32px;border:3px solid #333;border-top-color:#5b8dff;border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="color:#888;font-size:14px">Loading admin panel…</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+    document.body.appendChild(overlay);
+
+    let me = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 1500));
       me = await sb.restoreSession();
+      if (me && !me._banned) break;
     }
+
+    overlay.remove();
+
     if (!me) { window.location.href = 'index.html'; return; }
+    if (me._banned) { window.location.href = 'index.html'; return; }
+
     const role = me.profile?.role || me.role;
     if (!['admin','super_admin'].includes(role)) {
       window.location.href = 'index.html'; return;
