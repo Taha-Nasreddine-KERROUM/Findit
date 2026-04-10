@@ -2369,8 +2369,11 @@ function openVerifyModal() {
     document.getElementById('verifyIdRemoveBtn').style.display = 'none';
     document.getElementById('verifyIdInput').value = '';
     document.getElementById('verifyResult').style.display = 'none';
-    document.getElementById('verifySubmitBtn').textContent = 'Verify';
-    document.getElementById('verifySubmitBtn').disabled = false;
+    // Always reset the button so re-opening the modal works correctly
+    const btn = document.getElementById('verifySubmitBtn');
+    btn.textContent = 'Verify';
+    btn.disabled = false;
+    btn.setAttribute('onclick', 'submitVerifyId()');
     document.getElementById('verifyIdArea').onclick = () => document.getElementById('verifyIdInput').click();
     document.getElementById('verifyModal').classList.add('open');
     document.body.style.overflow = 'hidden';
@@ -2421,14 +2424,26 @@ async function submitVerifyId() {
         const res = await r.json();
 
         if (res.ok && res.badge !== 'none') {
-            // Update local user badge instantly
+            // 1. Update in-memory user state
             if (App.currentUser) App.currentUser.badge = res.badge;
+
+            // 2. Update ownerBadge on every post by this user so cards re-render immediately
+            if (App.currentUser) {
+                POSTS.forEach(p => {
+                    if (p.owner === App.currentUser.uid) p.ownerBadge = res.badge;
+                });
+                renderFeed();
+            }
+
+            // 3. Refresh menu (Verify vs Change Status toggle)
             updateMenuState();
+
             resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(34,201,122,.1);color:#22c97a;border:1px solid rgba(34,201,122,.25)';
             resultEl.textContent = res.message;
             btn.textContent = 'Done';
             btn.disabled = false;
-            btn.onclick = closeVerifyModal;
+            // Use setAttribute so openVerifyModal can safely reset it next time
+            btn.setAttribute('onclick', 'closeVerifyModal()');
             showToast(res.message);
         } else {
             resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(255,80,80,.1);color:#ff6b6b;border:1px solid rgba(255,80,80,.25)';
