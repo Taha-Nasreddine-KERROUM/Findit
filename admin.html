@@ -404,30 +404,92 @@
     overlay.innerHTML = '<div style="width:32px;height:32px;border:3px solid #333;border-top-color:#5b8dff;border-radius:50%;animation:spin 0.8s linear infinite"></div><div style="color:#888;font-size:14px">Loading admin panel…</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
     document.body.appendChild(overlay);
 
-    let me = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 1500));
+    // Single attempt — token is in localStorage and the API call is fast.
+    // Only retry once on genuine network failure (status 0).
+    let me = await sb.restoreSession();
+    if (!me) {
+      // Wait 1.5s and retry once (handles cold-start server delay)
+      await new Promise(r => setTimeout(r, 1500));
       me = await sb.restoreSession();
-      if (me && !me._banned) break;
     }
 
     overlay.remove();
 
     if (!me) {
-      // Not signed in — go back and auto-open login
-      window.location.href = 'index.html?relogin=1';
+      // Not signed in — show inline login rather than bouncing to index.html
+      showAdminLoginGate();
       return;
     }
     if (me._banned) { window.location.href = 'index.html'; return; }
 
     const role = me.profile?.role || me.role;
     if (!['admin','super_admin'].includes(role)) {
-      // Signed in but not admin yet — go back
-      window.location.href = 'index.html';
+      // Signed in but not an admin — show a "not authorised" gate, don't redirect
+      showAdminLoginGate('not_admin');
       return;
     }
     boot(me);
   })();
+
+  // ── INLINE LOGIN GATE (shown instead of redirecting away) ────────────────────
+  function showAdminLoginGate(reason) {
+    const isNotAdmin = reason === 'not_admin';
+    const gate = document.createElement('div');
+    gate.id = 'adminLoginGate';
+    gate.style.cssText = 'position:fixed;inset:0;background:#0d0f14;display:flex;align-items:center;justify-content:center;z-index:99998;padding:20px';
+    gate.innerHTML = `
+      <div style="background:#161820;border:1px solid rgba(255,255,255,0.07);border-radius:20px;padding:32px;width:100%;max-width:360px;text-align:center">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:4px">FindIt Admin</div>
+        <div style="font-size:13px;color:#6b7080;margin-bottom:24px">${isNotAdmin ? 'Your account does not have admin access.' : 'Sign in to access the admin panel.'}</div>
+        ${isNotAdmin ? '' : `
+          <input id="gateUid" type="text" placeholder="Username" autocomplete="username"
+            style="width:100%;background:#1e2028;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:11px 13px;color:#eef0f5;font-size:14px;outline:none;margin-bottom:8px;display:block;box-sizing:border-box;font-family:inherit">
+          <input id="gatePw" type="password" placeholder="Password" autocomplete="current-password"
+            style="width:100%;background:#1e2028;border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:11px 13px;color:#eef0f5;font-size:14px;outline:none;margin-bottom:8px;display:block;box-sizing:border-box;font-family:inherit">
+          <div id="gateErr" style="display:none;color:#e05a5a;font-size:12px;margin-bottom:10px"></div>
+          <button id="gateBtn" onclick="doAdminGateLogin()"
+            style="width:100%;padding:11px;background:#5b8dff;border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:12px">Sign in</button>
+        `}
+        <a href="index.html" style="font-size:13px;color:#6b7080;text-decoration:none">← Back to FindIt</a>
+      </div>`;
+    document.body.appendChild(gate);
+
+    // Allow Enter key in the gate inputs
+    setTimeout(() => {
+      const pw = document.getElementById('gatePw');
+      if (pw) pw.addEventListener('keydown', e => { if (e.key === 'Enter') doAdminGateLogin(); });
+      const uid = document.getElementById('gateUid');
+      if (uid) uid.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('gatePw')?.focus(); });
+    }, 50);
+  }
+
+  async function doAdminGateLogin() {
+    const uid = document.getElementById('gateUid')?.value.trim();
+    const pw  = document.getElementById('gatePw')?.value;
+    const err = document.getElementById('gateErr');
+    const btn = document.getElementById('gateBtn');
+    if (!uid || !pw) { err.textContent = 'Enter username and password'; err.style.display = ''; return; }
+    btn.textContent = 'Signing in…'; btn.disabled = true;
+    const res = await sb.login(uid, pw);
+    if (!res || res._error) {
+      err.textContent = res?._error || 'Wrong username or password';
+      err.style.display = '';
+      btn.textContent = 'Sign in'; btn.disabled = false;
+      return;
+    }
+    // Re-check role
+    const me = await sb.restoreSession();
+    const role = me?.profile?.role || me?.role;
+    if (!me || !['admin','super_admin'].includes(role)) {
+      err.textContent = 'This account does not have admin access.';
+      err.style.display = '';
+      btn.textContent = 'Sign in'; btn.disabled = false;
+      return;
+    }
+    // Success — remove gate and boot
+    document.getElementById('adminLoginGate')?.remove();
+    boot(me);
+  }
 
   function boot(me) {
     ME = me;
@@ -480,7 +542,7 @@
 
   async function adminSignOut() {
     await sb.signOut();
-    window.location.href = 'index.html';
+    window.location.href = 'index.html';  // token is cleared; index will show logged-out state
   }
 
   // ── NAVIGATION ────────────────────────────────────────────────────────────────
