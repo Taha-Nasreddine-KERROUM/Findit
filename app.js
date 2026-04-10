@@ -33,10 +33,16 @@ const App = {
     initFilters();
     renderFeed();
     startPolling();
-    // If redirected from admin panel after session loss, open login automatically
+    // If redirected from admin panel — go straight back if already logged in as admin,
+    // otherwise open the login modal.
     if (new URLSearchParams(window.location.search).get('relogin') === '1') {
         history.replaceState({}, '', window.location.pathname);
-        setTimeout(() => { openLogin(); showToast('Please sign in again to access the admin panel.'); }, 500);
+        if (App.isAdmin) {
+            // Session restored fine — go back to admin panel immediately
+            window.location.href = 'admin.html';
+        } else {
+            setTimeout(() => { openLogin(); showToast('Please sign in to access the admin panel.'); }, 500);
+        }
     }
 })();
 
