@@ -2439,30 +2439,6 @@ async function submitVerifyId() {
 }
 
 
-
-    const result = await sb.checkIdImage(file);
-
-    if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
-
-    if (!result) return;  // model error — let user submit anyway
-
-    if (!result.is_id) {
-        // show warning but don't hard block — admin still reviews
-        showToast(`⚠️ This doesn't look like an ID card (${Math.round(result.confidence*100)}% confidence). Please upload a clear photo of your staff ID.`);
-        // flash the upload area red briefly
-        const area = document.getElementById('arIdUploadArea');
-        if (area) {
-            area.style.borderColor = '#e05a5a';
-            setTimeout(() => { area.style.borderColor = ''; }, 2500);
-        }
-    } else {
-        showToast(`✅ ID detected (${Math.round(result.confidence*100)}% confidence)`);
-    }
-}
-
-
-
-
 function _showNudgeBanner(data) {
     showToast(`📌 "${data.title}" — is this still active?`);
     // Also show a persistent banner they can act on
