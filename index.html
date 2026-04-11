@@ -45,13 +45,19 @@
     </button>
 </div>
 
-<!-- ── MATCH PANEL (slides down from logo) ── -->
-<div class="match-panel" id="matchPanel" style="display:none">
-    <div class="match-panel-head">
-        <span>🔍 Image Matches</span>
-        <button onclick="closeMatchPanel()">✕</button>
+<!-- ── NOTIFICATION PANEL (slides down from logo) ── -->
+<div class="notif-panel" id="notifPanel" style="display:none">
+    <div class="notif-panel-head">
+        <div class="notif-tabs">
+            <button class="notif-tab active" id="notifTabNew" onclick="_renderNotifPanel('new')">New</button>
+            <button class="notif-tab" id="notifTabHistory" onclick="_renderNotifPanel('history')">History</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+            <button class="notif-clear-btn" id="notifClearBtn" onclick="clearHistoryNotifs()" style="display:none">Clear</button>
+            <button class="notif-close-btn" onclick="closeNotifPanel()">✕</button>
+        </div>
     </div>
-    <div id="matchPanelList"></div>
+    <div id="notifList"></div>
 </div>
 
 <!-- ── IMAGE SEARCH MODAL ── -->
