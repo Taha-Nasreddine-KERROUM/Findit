@@ -1102,7 +1102,7 @@ async function showDMInbox() {
         <div style="flex:1;min-width:0">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
                 <span style="font-weight:600;font-size:13px">u/${escHtml(c.uid)}</span>
-                <span style="font-size:11px;color:var(--muted)">${c.last_at ? timeAgo(new Date(c.last_at)) : ''}</span>
+
             </div>
             <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(c.last_msg || '')}</div>
         </div>
@@ -1624,6 +1624,12 @@ async function doRegister() {
             const label = res.badge === 'student' ? '🎓 Student' : res.badge === 'staff' ? '🏫 Staff' : '✅ Verified';
             showToast(`${label} badge added to your profile!`);
         }
+        // Save token so session persists across refreshes (bypassed sb.register, must save manually)
+        if (res.token) {
+            localStorage.setItem('fi_token', res.token);
+            // Sync the token into the sb client so subsequent API calls are authenticated
+            sb._setToken(res.token);
+        }
         await afterAuth(res);
     } catch(e) {
         err.textContent = 'Could not reach server';
@@ -1916,18 +1922,18 @@ let _matches = [];       // accumulated image_matches from SSE
 let _matchesSeen = false; // true once user has opened the panel
 
 function onLogoClick() {
-    if (_matches.length) {
-        const panel = document.getElementById('matchPanel');
-        const isOpen = panel.style.display !== 'none';
-        if (isOpen) {
-            closeMatchPanel();
-        } else {
-            openMatchPanel();  // renders the list first
-            _matchesSeen = true;
-            updateMatchDot();  // then hide the dot (matches array stays for display)
-        }
+    const panel = document.getElementById('notifPanel');
+    const isOpen = panel && panel.style.display !== 'none';
+    if (isOpen) {
+        closeNotifPanel();
     } else {
-        goHome();
+        // If there are notifications or matches, open panel; otherwise go home
+        const unseen = _notifications.filter(n => !n.seen).length;
+        if (unseen > 0 || _matches.length > 0 || _notifications.length > 0) {
+            openNotifPanel();
+        } else {
+            goHome();
+        }
     }
 }
 function openMatchPanel() {
@@ -1983,14 +1989,112 @@ function addMatches(newMatches) {
 }
 
 function updateMatchDot() {
-    const dot = document.getElementById('matchDot');
+    _updateNotifBadge();
+}
+
+// ── NOTIFICATION SYSTEM ──────────────────────────────────────────────────────
+// Notifications stored in-memory, split into new/history
+let _notifications = [];       // {id, type, text, seen, ts}
+let _notifPanelOpen = false;
+
+function _addNotification(type, text) {
+    const notif = { id: Date.now() + Math.random(), type, text, seen: false, ts: new Date().toISOString() };
+    _notifications.unshift(notif);
+    _updateNotifBadge();
+}
+
+function _updateNotifBadge() {
+    const dot  = document.getElementById('matchDot');
+    const unseen = _notifications.filter(n => !n.seen).length;
     if (!dot) return;
-    if (_matches.length && !_matchesSeen) {
-        dot.textContent = _matches.length;
+    const hasPosts = _matches.length && !_matchesSeen;
+    const total = unseen + (hasPosts ? _matches.length : 0);
+    if (total > 0) {
+        dot.textContent = total;
         dot.style.display = '';
+        dot.style.background = 'var(--accent)';
     } else {
         dot.style.display = 'none';
     }
+}
+
+function openNotifPanel() {
+    _notifPanelOpen = true;
+    const panel = document.getElementById('notifPanel');
+    if (!panel) return;
+    panel.style.display = '';
+    _renderNotifPanel('new');
+}
+
+function closeNotifPanel() {
+    _notifPanelOpen = false;
+    const panel = document.getElementById('notifPanel');
+    if (panel) panel.style.display = 'none';
+}
+
+function _renderNotifPanel(tab) {
+    const tabNew  = document.getElementById('notifTabNew');
+    const tabHist = document.getElementById('notifTabHistory');
+    const list    = document.getElementById('notifList');
+    if (!list) return;
+
+    if (tabNew)  tabNew.classList.toggle('active', tab === 'new');
+    if (tabHist) tabHist.classList.toggle('active', tab === 'history');
+
+    const items = tab === 'new'
+        ? _notifications.filter(n => !n.seen)
+        : _notifications.filter(n => n.seen);
+
+    // Mark new ones as seen when viewing the 'new' tab
+    const clearBtn = document.getElementById('notifClearBtn');
+    if (clearBtn) clearBtn.style.display = tab === 'history' ? '' : 'none';
+
+    if (tab === 'new') {
+        _notifications.forEach(n => { if (!n.seen) n.seen = true; });
+        _matchesSeen = true;
+        _updateNotifBadge();
+    }
+
+    if (!items.length && _matches.length === 0 && tab === 'new') {
+        list.innerHTML = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--muted)">No new notifications</div>';
+        return;
+    }
+
+    let html = '';
+
+    // Show image matches inside the notif panel under "new" tab
+    if (tab === 'new' && _matches.length) {
+        _matches.forEach(m => {
+            const imgSrc = m.image_url
+                ? (m.image_url.startsWith('http') ? m.image_url : sb.API_BASE + m.image_url)
+                : null;
+            html += `<div class="notif-item" onclick="closeNotifPanel();goToMatchPost('${m.id}')">
+                ${imgSrc ? `<img class="notif-thumb" src="${imgSrc}">` : '<div class="notif-icon">📦</div>'}
+                <div class="notif-body">
+                    <div class="notif-text">🔍 Visual match: ${escHtml(m.title||'')} (${Math.round((m.score||0)*100)}%)</div>
+                </div>
+            </div>`;
+        });
+    }
+
+    items.forEach(n => {
+        const icon = n.type === 'alert' ? '⚠️' : n.type === 'nudge' ? '📌' : '🔔';
+        html += `<div class="notif-item">
+            <div class="notif-icon">${icon}</div>
+            <div class="notif-body">
+                <div class="notif-text">${escHtml(n.text)}</div>
+                <div class="notif-time">${timeAgo(new Date(n.ts))}</div>
+            </div>
+        </div>`;
+    });
+
+    if (!html) html = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--muted)">Nothing here yet</div>';
+    list.innerHTML = html;
+}
+
+function clearHistoryNotifs() {
+    _notifications = _notifications.filter(n => !n.seen);
+    _renderNotifPanel('history');
 }
 
 // ── Hook SSE: listen for image_matches events ─────────────────────────────────
@@ -2005,10 +2109,36 @@ function connectUserSSE(uid) {
             const data = JSON.parse(e.data);
             if (data.type === 'image_matches') {
                 addMatches(data.matches);
+                _addNotification('match', `🔍 ${data.matches.length} visual match${data.matches.length>1?'es':''} found!`);
                 showToast(`🔍 ${data.matches.length} visual match${data.matches.length>1?'es':''} found!`);
             }
             if (data.type === 'nudge') {
                 _showNudgeBanner(data);
+                _addNotification('nudge', `📌 "${data.title}" — is this still active?`);
+            }
+            if (data.type === 'alert_received') {
+                const msg = data.note ? `⚠️ Alert from admin: ${data.note}` : '⚠️ You received an admin alert.';
+                _addNotification('alert', msg);
+                showToast(msg);
+            }
+            if (data.type === 'banned') {
+                // Force immediate sign-out — no reload needed
+                showToast('Your account has been banned.');
+                setTimeout(async () => {
+                    await sb.signOut();
+                    App.isLoggedIn   = false;
+                    App.isAdmin      = false;
+                    App.isSuperAdmin = false;
+                    App.currentUser  = null;
+                    if (_userSSE) { _userSSE.close(); _userSSE = null; }
+                    if (_dmSSE)   { _dmSSE.close();   _dmSSE   = null; }
+                    updateMenuState();
+                    renderFeed();
+                    // Close any open sheets/modals
+                    document.querySelectorAll('.comments-panel, .bottom-sheet, .dm-sheet').forEach(el => el.classList.remove('open'));
+                    document.querySelectorAll('.modal-bg').forEach(el => el.classList.remove('open'));
+                    document.body.style.overflow = '';
+                }, 1500);
             }
         } catch {}
     };
@@ -2112,21 +2242,34 @@ async function runAiSearch(query) {
     if (chip) { chip.style.display = ''; chip.classList.add('active'); }
 
     const feed = document.getElementById('feed');
-    const empty = document.getElementById('emptyState');
     if (feed) feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">✨ Searching…</div>';
 
+    // Primary: semantic search (text→image via SigLIP)
     const raw = await sb.aiSearch(query);
     if (!_aiSearchActive) return;
 
-    const cards = (raw || []).map(r => {
+    let cards = (raw || []).map(r => {
         const card = mapRow(r);
         card._similarity = r.similarity || null;
         return card;
     });
-    // Always enter image-search mode (even empty) so we don't fall back to all posts
+
+    // Fallback: if semantic returned nothing, do a local keyword search across all posts
+    if (!cards.length) {
+        const q = query.toLowerCase();
+        const kw = POSTS.filter(p =>
+            [p.title, p.desc, p.location, p.category, p.owner].some(s => s.toLowerCase().includes(q))
+        );
+        if (kw.length) {
+            cards = kw;
+            showToast('✨ Showing keyword matches — AI search works best with image posts');
+        } else {
+            showToast('No results found — try different words');
+        }
+    }
+
     _imgSearchResults = cards;
     renderFeed();
-    if (!cards.length) showToast('No results found — try different words');
 }
 
 function exitAiSearch() {
