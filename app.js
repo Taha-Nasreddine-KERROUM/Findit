@@ -1340,7 +1340,7 @@ async function submitPost() {
     _matches = [];
     _matchesSeen = false;
     updateMatchDot();
-    closeMatchPanel();
+    closeNotifPanel();
     const title    = document.getElementById('postTitle').value.trim();
     const desc     = document.getElementById('postDesc').value.trim();
     const location = document.getElementById('postLocation').value;
@@ -1936,36 +1936,9 @@ function onLogoClick() {
         }
     }
 }
-function openMatchPanel() {
-    renderMatchPanel();
-    document.getElementById('matchPanel').style.display = '';
-}
-function closeMatchPanel() {
-    document.getElementById('matchPanel').style.display = 'none';
-}
-function renderMatchPanel() {
-    const list = document.getElementById('matchPanelList');
-    if (!_matches.length) {
-        list.innerHTML = '<div style="padding:16px;text-align:center;font-size:13px;color:var(--muted)">No matches yet</div>';
-        return;
-    }
-    list.innerHTML = _matches.map(m => {
-        // image_url from SSE is a server-relative path like /images/abc.jpg
-        const imgSrc = m.image_url
-            ? (m.image_url.startsWith('http') ? m.image_url : sb.API_BASE + m.image_url)
-            : null;
-        return `
-        <div class="match-item" onclick="closeMatchPanel();goToMatchPost('${m.id}')">
-            ${imgSrc
-                ? `<img class="match-thumb" src="${imgSrc}" loading="lazy">`
-                : `<div class="match-thumb-empty">📦</div>`}
-            <div style="flex:1;min-width:0">
-                <div class="match-title">${escHtml(m.title||'')}</div>
-                <div class="match-score">${Math.round((m.score||0)*100)}% visual match</div>
-            </div>
-        </div>`;
-    }).join('');
-}
+function openMatchPanel() { openNotifPanel(); }
+function closeMatchPanel() { closeNotifPanel(); }
+function renderMatchPanel() { /* handled by notif panel */ }
 
 function goToMatchPost(postId) {
     // If post is already in POSTS array, scroll to it
