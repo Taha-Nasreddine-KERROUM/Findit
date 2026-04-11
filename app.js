@@ -1927,9 +1927,8 @@ function onLogoClick() {
     if (isOpen) {
         closeNotifPanel();
     } else {
-        // If there are notifications or matches, open panel; otherwise go home
         const unseen = _notifications.filter(n => !n.seen).length;
-        if (unseen > 0 || _matches.length > 0 || _notifications.length > 0) {
+        if (unseen > 0 || _notifications.length > 0) {
             openNotifPanel();
         } else {
             goHome();
@@ -1967,23 +1966,21 @@ function updateMatchDot() {
 
 // ── NOTIFICATION SYSTEM ──────────────────────────────────────────────────────
 // Notifications stored in-memory, split into new/history
-let _notifications = [];       // {id, type, text, seen, ts}
+let _notifications = [];       // {id, type, text, seen, ts, meta}
 let _notifPanelOpen = false;
 
-function _addNotification(type, text) {
-    const notif = { id: Date.now() + Math.random(), type, text, seen: false, ts: new Date().toISOString() };
+function _addNotification(type, text, meta = {}) {
+    const notif = { id: Date.now() + Math.random(), type, text, seen: false, ts: new Date().toISOString(), meta };
     _notifications.unshift(notif);
     _updateNotifBadge();
 }
 
 function _updateNotifBadge() {
-    const dot  = document.getElementById('matchDot');
+    const dot    = document.getElementById('matchDot');
     const unseen = _notifications.filter(n => !n.seen).length;
     if (!dot) return;
-    const hasPosts = _matches.length && !_matchesSeen;
-    const total = unseen + (hasPosts ? _matches.length : 0);
-    if (total > 0) {
-        dot.textContent = total;
+    if (unseen > 0) {
+        dot.textContent = unseen;
         dot.style.display = '';
         dot.style.background = 'var(--accent)';
     } else {
@@ -2014,51 +2011,69 @@ function _renderNotifPanel(tab) {
     if (tabNew)  tabNew.classList.toggle('active', tab === 'new');
     if (tabHist) tabHist.classList.toggle('active', tab === 'history');
 
-    const items = tab === 'new'
-        ? _notifications.filter(n => !n.seen)
-        : _notifications.filter(n => n.seen);
-
-    // Mark new ones as seen when viewing the 'new' tab
     const clearBtn = document.getElementById('notifClearBtn');
     if (clearBtn) clearBtn.style.display = tab === 'history' ? '' : 'none';
 
+    // Separate new vs seen
+    const newItems  = _notifications.filter(n => !n.seen);
+    const histItems = _notifications.filter(n => n.seen);
+    const items     = tab === 'new' ? newItems : histItems;
+
+    // Mark new ones as seen AFTER we snapshot them for rendering
     if (tab === 'new') {
-        _notifications.forEach(n => { if (!n.seen) n.seen = true; });
-        _matchesSeen = true;
-        _updateNotifBadge();
+        setTimeout(() => {
+            _notifications.forEach(n => { if (!n.seen) n.seen = true; });
+            _matchesSeen = true;
+            _updateNotifBadge();
+        }, 300);
     }
 
-    if (!items.length && _matches.length === 0 && tab === 'new') {
+    if (!items.length && tab === 'new') {
         list.innerHTML = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--muted)">No new notifications</div>';
+        return;
+    }
+    if (!items.length && tab === 'history') {
+        list.innerHTML = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--muted)">Nothing here yet</div>';
         return;
     }
 
     let html = '';
-
-    // Show image matches inside the notif panel under "new" tab
-    if (tab === 'new' && _matches.length) {
-        _matches.forEach(m => {
-            const imgSrc = m.image_url
-                ? (m.image_url.startsWith('http') ? m.image_url : sb.API_BASE + m.image_url)
-                : null;
-            html += `<div class="notif-item" onclick="closeNotifPanel();goToMatchPost('${m.id}')">
-                ${imgSrc ? `<img class="notif-thumb" src="${imgSrc}">` : '<div class="notif-icon">📦</div>'}
+    items.forEach(n => {
+        if (n.type === 'match') {
+            // Match notifications have embedded match data in meta
+            const matches = n.meta?.matches || [];
+            if (matches.length) {
+                matches.forEach(m => {
+                    const imgSrc = m.image_url
+                        ? (m.image_url.startsWith('http') ? m.image_url : sb.API_BASE + m.image_url)
+                        : null;
+                    html += `<div class="notif-item" onclick="closeNotifPanel();goToMatchPost('${m.id}')">
+                        ${imgSrc ? `<img class="notif-thumb" src="${imgSrc}">` : '<div class="notif-icon">📦</div>'}
+                        <div class="notif-body">
+                            <div class="notif-text">🔍 Visual match: ${escHtml(m.title||'')} (${Math.round((m.score||0)*100)}%)</div>
+                            <div class="notif-time">${timeAgo(new Date(n.ts))}</div>
+                        </div>
+                    </div>`;
+                });
+            } else {
+                html += `<div class="notif-item">
+                    <div class="notif-icon">🔍</div>
+                    <div class="notif-body">
+                        <div class="notif-text">${escHtml(n.text)}</div>
+                        <div class="notif-time">${timeAgo(new Date(n.ts))}</div>
+                    </div>
+                </div>`;
+            }
+        } else {
+            const icon = n.type === 'alert' ? '⚠️' : n.type === 'nudge' ? '📌' : '🔔';
+            html += `<div class="notif-item">
+                <div class="notif-icon">${icon}</div>
                 <div class="notif-body">
-                    <div class="notif-text">🔍 Visual match: ${escHtml(m.title||'')} (${Math.round((m.score||0)*100)}%)</div>
+                    <div class="notif-text">${escHtml(n.text)}</div>
+                    <div class="notif-time">${timeAgo(new Date(n.ts))}</div>
                 </div>
             </div>`;
-        });
-    }
-
-    items.forEach(n => {
-        const icon = n.type === 'alert' ? '⚠️' : n.type === 'nudge' ? '📌' : '🔔';
-        html += `<div class="notif-item">
-            <div class="notif-icon">${icon}</div>
-            <div class="notif-body">
-                <div class="notif-text">${escHtml(n.text)}</div>
-                <div class="notif-time">${timeAgo(new Date(n.ts))}</div>
-            </div>
-        </div>`;
+        }
     });
 
     if (!html) html = '<div style="padding:20px;text-align:center;font-size:13px;color:var(--muted)">Nothing here yet</div>';
@@ -2082,8 +2097,9 @@ function connectUserSSE(uid) {
             const data = JSON.parse(e.data);
             if (data.type === 'image_matches') {
                 addMatches(data.matches);
-                _addNotification('match', `🔍 ${data.matches.length} visual match${data.matches.length>1?'es':''} found!`);
-                showToast(`🔍 ${data.matches.length} visual match${data.matches.length>1?'es':''} found!`);
+                // Store each match group as a notification WITH match data in meta
+                _addNotification('match', `🔍 ${data.matches.length} visual match${data.matches.length>1?'es':''} found!`, { matches: data.matches });
+                // No toast — notification badge is enough
             }
             if (data.type === 'nudge') {
                 _showNudgeBanner(data);
@@ -2092,7 +2108,13 @@ function connectUserSSE(uid) {
             if (data.type === 'alert_received') {
                 const msg = data.note ? `⚠️ Alert from admin: ${data.note}` : '⚠️ You received an admin alert.';
                 _addNotification('alert', msg);
+                // Show toast AND open notification panel so user sees it
                 showToast(msg);
+                // Auto-open notif panel if not already open
+                const panel = document.getElementById('notifPanel');
+                if (panel && panel.style.display === 'none') {
+                    openNotifPanel();
+                }
             }
             if (data.type === 'banned') {
                 // Force immediate sign-out — no reload needed
@@ -2217,28 +2239,34 @@ async function runAiSearch(query) {
     const feed = document.getElementById('feed');
     if (feed) feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">✨ Searching…</div>';
 
-    // Primary: semantic search (text→image via SigLIP)
+    // Primary: semantic search (text→image via SigLIP on server)
     const raw = await sb.aiSearch(query);
     if (!_aiSearchActive) return;
 
     let cards = (raw || []).map(r => {
         const card = mapRow(r);
         card._similarity = r.similarity || null;
+        // Fix image URL
+        if (r.image_url && !r.image_url.startsWith('http')) {
+            card._imageUrl = sb.API_BASE + r.image_url;
+        }
         return card;
     });
 
-    // Fallback: if semantic returned nothing, do a local keyword search across all posts
+    // Always also run keyword search locally and merge (handles posts server didn't embed)
+    const q = query.toLowerCase().trim();
+    if (q.length > 1) {
+        const seenIds = new Set(cards.map(c => c.id));
+        const kwMatches = POSTS.filter(p => {
+            if (seenIds.has(p.id)) return false;
+            return [p.title, p.desc, p.location, p.category, p.owner]
+                .some(s => s.toLowerCase().includes(q));
+        }).map(p => ({ ...p, _similarity: null }));
+        cards = [...cards, ...kwMatches];
+    }
+
     if (!cards.length) {
-        const q = query.toLowerCase();
-        const kw = POSTS.filter(p =>
-            [p.title, p.desc, p.location, p.category, p.owner].some(s => s.toLowerCase().includes(q))
-        );
-        if (kw.length) {
-            cards = kw;
-            showToast('✨ Showing keyword matches — AI search works best with image posts');
-        } else {
-            showToast('No results found — try different words');
-        }
+        showToast('No results found — try different words');
     }
 
     _imgSearchResults = cards;
