@@ -333,7 +333,18 @@
 
       <!-- ── REPORTS ── -->
       <div class="panel" id="panel-reports">
+        <div style="display:flex;gap:6px;margin-bottom:16px;background:var(--surface2);border-radius:10px;padding:3px;width:fit-content">
+          <button id="reportTabPosts" onclick="switchReportTab('posts')"
+            style="padding:6px 18px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--surface);color:var(--text);font-family:inherit">
+            Posts
+          </button>
+          <button id="reportTabComments" onclick="switchReportTab('comments')"
+            style="padding:6px 18px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:var(--muted);font-family:inherit">
+            Comments
+          </button>
+        </div>
         <div id="reportsList"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+        <div id="commentReportsList" style="display:none"><div class="loading"><div class="spinner"></div> Loading…</div></div>
       </div>
 
       <!-- ── MOD LOG ── -->
@@ -844,6 +855,33 @@
   }
 
   // ── REPORTS ──────────────────────────────────────────────────────────────────
+  let _reportTab = 'posts';
+
+  function switchReportTab(tab) {
+    _reportTab = tab;
+    const btnPosts    = document.getElementById('reportTabPosts');
+    const btnComments = document.getElementById('reportTabComments');
+    const listPosts   = document.getElementById('reportsList');
+    const listComments= document.getElementById('commentReportsList');
+    if (tab === 'posts') {
+      btnPosts.style.background = 'var(--surface)'; btnPosts.style.color = 'var(--text)';
+      btnComments.style.background = 'transparent'; btnComments.style.color = 'var(--muted)';
+      listPosts.style.display = ''; listComments.style.display = 'none';
+      loadReports();
+    } else {
+      btnComments.style.background = 'var(--surface)'; btnComments.style.color = 'var(--text)';
+      btnPosts.style.background = 'transparent'; btnPosts.style.color = 'var(--muted)';
+      listPosts.style.display = 'none'; listComments.style.display = '';
+      loadCommentReports();
+    }
+  }
+
+  function _resolveImg(url) {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    return sb.API_BASE + url;
+  }
+
   async function loadReports() {
     const el = document.getElementById('reportsList');
     el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
@@ -852,7 +890,9 @@
       el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">No reported posts — all clear.</div>';
       return;
     }
-    el.innerHTML = reports.map(r => `
+    el.innerHTML = reports.map(r => {
+      const imgSrc = _resolveImg(r.image_url);
+      return `
     <div class="req-card" id="report-${r.id}">
       <div class="req-head" style="margin-bottom:10px">
         <div style="flex:1;min-width:0">
@@ -862,13 +902,66 @@
         <span style="background:rgba(224,90,90,0.12);color:var(--danger);border:1px solid rgba(224,90,90,0.25);border-radius:50px;padding:3px 10px;font-size:11px;font-weight:700;flex-shrink:0">⚑ ${r.report_count} report${r.report_count!==1?'s':''}</span>
       </div>
       ${r.description ? `<div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5">${esc(r.description)}</div>` : ''}
-      ${r.image_url ? `<img src="${r.image_url}" style="max-width:100%;max-height:200px;border-radius:10px;margin-bottom:10px;object-fit:cover;display:block">` : ''}
+      ${imgSrc ? `<img src="${imgSrc}" style="max-width:100%;max-height:220px;border-radius:10px;margin-bottom:10px;object-fit:contain;border:1px solid var(--border);display:block">` : ''}
       ${r.reasons ? `<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Reasons: ${esc(r.reasons)}</div>` : ''}
       <div class="req-actions">
-        <button class="btn btn-danger btn-sm" onclick="doDeletePost('${r.id}','${esc(r.author_uid)}')">Delete Post</button>
+        <button class="btn btn-danger btn-sm" onclick="doDeletePost('${r.id}')">Delete Post</button>
         <button class="btn btn-ghost btn-sm" onclick="dismissReport('${r.id}')">Dismiss</button>
       </div>
-    </div>`).join('');
+    </div>`; }).join('');
+  }
+
+  async function loadCommentReports() {
+    const el = document.getElementById('commentReportsList');
+    el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
+    const reports = await sb.getCommentReports();
+    if (!reports || !reports.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">No reported comments — all clear.</div>';
+      return;
+    }
+    el.innerHTML = reports.map(r => {
+      const commentImg = _resolveImg(r.comment_image_url);
+      const postImg    = _resolveImg(r.post_image_url);
+      return `
+    <div class="req-card" id="creport-${r.comment_id}">
+      <div class="req-head" style="margin-bottom:10px">
+        <div style="flex:1;min-width:0">
+          <div class="req-name" style="font-size:14px">Comment by u/${esc(r.author_uid)}</div>
+          <div class="req-meta">on post: "${esc(r.post_title)}" · ${formatDate(r.report_date)}</div>
+        </div>
+        <span style="background:rgba(224,90,90,0.12);color:var(--danger);border:1px solid rgba(224,90,90,0.25);border-radius:50px;padding:3px 10px;font-size:11px;font-weight:700;flex-shrink:0">⚑ Reported</span>
+      </div>
+      <!-- The actual comment content -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:10px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600">💬 REPORTED COMMENT</div>
+        ${r.comment_body ? `<div style="font-size:13px;line-height:1.55">${esc(r.comment_body)}</div>` : ''}
+        ${commentImg ? `<img src="${commentImg}" style="max-width:100%;max-height:200px;border-radius:8px;margin-top:8px;object-fit:contain;border:1px solid var(--border);display:block">` : ''}
+      </div>
+      ${postImg ? `<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">Post image:</div><img src="${postImg}" style="max-width:100%;max-height:140px;border-radius:8px;object-fit:contain;border:1px solid var(--border);display:block"></div>` : ''}
+      ${r.reason ? `<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Reason: ${esc(r.reason.replace(/^comment:[^:]+:/,''))}</div>` : ''}
+      <div class="req-actions">
+        <button class="btn btn-danger btn-sm" onclick="doDeleteComment('${r.comment_id}')">Delete Comment</button>
+        <button class="btn btn-ghost btn-sm" onclick="dismissCommentReport('${r.comment_id}')">Dismiss</button>
+      </div>
+    </div>`; }).join('');
+  }
+
+  async function dismissCommentReport(commentId) {
+    await sb.deleteCommentReport(commentId);
+    document.getElementById('creport-' + commentId)?.remove();
+    const el = document.getElementById('commentReportsList');
+    if (!el.querySelector('.req-card')) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">No reported comments — all clear.</div>';
+    }
+    toast('Comment report dismissed');
+  }
+
+  async function doDeleteComment(commentId) {
+    if (!confirm('Delete this comment? This cannot be undone.')) return;
+    await sb.deleteCommentAndReport(commentId);
+    await sb.logAction(ME.profile.id, 'delete_comment', null, null, 'Deleted reported comment');
+    document.getElementById('creport-' + commentId)?.remove();
+    toast('Comment deleted');
   }
 
   async function dismissReport(postId) {
@@ -886,9 +979,8 @@
   async function doDeletePost(postId) {
     if (!confirm('Delete this post? This cannot be undone.')) return;
     await sb.deletePost(postId);
-    await sb.deleteReport(postId);  // clear any reports too
+    await sb.deleteReport(postId);
     await sb.logAction(ME.profile.id, 'delete_post', null, postId, 'Deleted via admin panel');
-    // Remove from reports panel if visible
     document.getElementById('report-' + postId)?.remove();
     loadPosts();
     toast('Post deleted');
