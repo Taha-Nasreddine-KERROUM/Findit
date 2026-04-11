@@ -180,6 +180,15 @@ const sb = (() => {
         return api(`/reports/${postId}`, { method:'POST', body: JSON.stringify({reason}) });
     }
     async function getReports() { return api('/reports') || []; }
+    async function getCommentReports() { return api('/reports/comments') || []; }
+    async function deleteCommentReport(commentId) {
+        return api(`/reports/comments/${commentId}`, { method:'DELETE' });
+    }
+    async function deleteCommentAndReport(commentId) {
+        await api(`/comments/${commentId}`, { method:'DELETE' });
+        await api(`/reports/comments/${commentId}`, { method:'DELETE' });
+        return { ok: true };
+    }
 
     // ── ADMIN ─────────────────────────────────────────────────────────────────
     async function getStats()           { return api('/admin/stats'); }
@@ -385,10 +394,16 @@ const sb = (() => {
         }
     }
 
+    function _setToken(t) {
+        _token = t;
+        localStorage.setItem('fi_token', t);
+    }
+
     return {
         API_URL,
         API_BASE: API_URL,
         getToken: () => _token,
+        _setToken,
         register, login,
         handleCallback, restoreSession, signOut, getMe,
         getProfileStats, getPostsByUser, getAllUsers, updateProfile,
@@ -400,6 +415,7 @@ const sb = (() => {
         getConversations, getDMThread, sendDM, getUnreadCount, getPostsSince,
         deleteComment, editComment, reportComment, voteComment,
         sendAlert, getAlerts, reportPost, deleteReport, getReports,
+        getCommentReports, deleteCommentReport, deleteCommentAndReport,
         submitAdminRequest, getPendingRequests, reviewRequest, logAction, getModLogs,
         sendMagicLink,
     };
