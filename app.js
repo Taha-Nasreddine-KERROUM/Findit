@@ -1918,8 +1918,7 @@ async function runImgSearch() {
 // ══════════════════════════════════════════════════════════════════════════════
 // ── FEATURE 2: AUTO-MATCH PANEL (logo button) ─────────────────────────────────
 // ══════════════════════════════════════════════════════════════════════════════
-let _matches = [];       // accumulated image_matches from SSE
-let _matchesSeen = false; // true once user has opened the panel
+let _matches = [];       // accumulated image_matches from SSE (kept for goToMatchPost)
 
 function onLogoClick() {
     const panel = document.getElementById('notifPanel');
@@ -1927,8 +1926,7 @@ function onLogoClick() {
     if (isOpen) {
         closeNotifPanel();
     } else {
-        const unseen = _notifications.filter(n => !n.seen).length;
-        if (unseen > 0 || _notifications.length > 0) {
+        if (_notifications.length > 0) {
             openNotifPanel();
         } else {
             goHome();
@@ -1957,7 +1955,7 @@ function goToMatchPost(postId) {
 function addMatches(newMatches) {
     const seen = new Set(_matches.map(m => m.id));
     newMatches.forEach(m => { if (!seen.has(m.id)) _matches.push(m); });
-    updateMatchDot();
+    // badge updated by _addNotification
 }
 
 function updateMatchDot() {
@@ -2019,13 +2017,15 @@ function _renderNotifPanel(tab) {
     const histItems = _notifications.filter(n => n.seen);
     const items     = tab === 'new' ? newItems : histItems;
 
-    // Mark new ones as seen AFTER we snapshot them for rendering
+    // Mark exactly the IDs visible right now as seen after 2s.
+    // Any notification that arrives AFTER this render is NOT in seenNow,
+    // so it stays unseen and keeps the badge lit.
     if (tab === 'new') {
+        const seenNow = new Set(newItems.map(n => n.id));
         setTimeout(() => {
-            _notifications.forEach(n => { if (!n.seen) n.seen = true; });
-            _matchesSeen = true;
+            _notifications.forEach(n => { if (seenNow.has(n.id)) n.seen = true; });
             _updateNotifBadge();
-        }, 300);
+        }, 2000);
     }
 
     if (!items.length && tab === 'new') {
@@ -2097,9 +2097,14 @@ function connectUserSSE(uid) {
             const data = JSON.parse(e.data);
             if (data.type === 'image_matches') {
                 addMatches(data.matches);
-                // Store each match group as a notification WITH match data in meta
+                // Store as notification with full match data so history works
                 _addNotification('match', `🔍 ${data.matches.length} visual match${data.matches.length>1?'es':''} found!`, { matches: data.matches });
-                // No toast — notification badge is enough
+                // Flash badge
+                const _md = document.getElementById('matchDot');
+                if (_md) { _md.style.transform = 'scale(1.5)'; setTimeout(() => _md.style.transform = '', 400); }
+                // If panel already open refresh it so new match appears immediately
+                const _mp = document.getElementById('notifPanel');
+                if (_mp && _mp.style.display !== 'none') _renderNotifPanel('new');
             }
             if (data.type === 'nudge') {
                 _showNudgeBanner(data);
@@ -2108,12 +2113,12 @@ function connectUserSSE(uid) {
             if (data.type === 'alert_received') {
                 const msg = data.note ? `⚠️ Alert from admin: ${data.note}` : '⚠️ You received an admin alert.';
                 _addNotification('alert', msg);
-                // Show toast AND open notification panel so user sees it
                 showToast(msg);
-                // Auto-open notif panel if not already open
-                const panel = document.getElementById('notifPanel');
-                if (panel && panel.style.display === 'none') {
-                    openNotifPanel();
+                // If panel already open, re-render so new alert shows immediately.
+                // If closed, just leave badge lit – user will click to see it.
+                const _ap = document.getElementById('notifPanel');
+                if (_ap && _ap.style.display !== 'none') {
+                    _renderNotifPanel('new');
                 }
             }
             if (data.type === 'banned') {
@@ -2239,24 +2244,26 @@ async function runAiSearch(query) {
     const feed = document.getElementById('feed');
     if (feed) feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">✨ Searching…</div>';
 
-    // Primary: semantic search (text→image via SigLIP on server)
-    const raw = await sb.aiSearch(query);
+    // Run server-side semantic search (SigLIP text→image) + keyword hybrid
+    let raw = [];
+    try { raw = await sb.aiSearch(query); } catch(e) { console.error('[ai search]', e); }
     if (!_aiSearchActive) return;
 
+    // Map server results — fix image URLs
+    const seenIds = new Set();
     let cards = (raw || []).map(r => {
         const card = mapRow(r);
         card._similarity = r.similarity || null;
-        // Fix image URL
         if (r.image_url && !r.image_url.startsWith('http')) {
             card._imageUrl = sb.API_BASE + r.image_url;
         }
+        seenIds.add(card.id);
         return card;
     });
 
-    // Always also run keyword search locally and merge (handles posts server didn't embed)
+    // Also search local POSTS array by keyword so text-only posts appear too
     const q = query.toLowerCase().trim();
-    if (q.length > 1) {
-        const seenIds = new Set(cards.map(c => c.id));
+    if (q.length > 0) {
         const kwMatches = POSTS.filter(p => {
             if (seenIds.has(p.id)) return false;
             return [p.title, p.desc, p.location, p.category, p.owner]
