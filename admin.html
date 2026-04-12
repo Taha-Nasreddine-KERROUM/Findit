@@ -289,6 +289,7 @@
           <div class="stat-card danger"><div class="stat-value" id="st-banned">—</div><div class="stat-label">Banned</div></div>
           <div class="stat-card warn"><div class="stat-value" id="st-admins">—</div><div class="stat-label">Admins</div></div>
           <div class="stat-card warn"><div class="stat-value" id="st-pending">—</div><div class="stat-label">Pending Requests</div></div>
+          <div class="stat-card danger"><div class="stat-value" id="st-comment-reports">—</div><div class="stat-label">Comment Reports</div></div>
         </div>
         <div class="section-header"><div class="section-title">Pending Admin Requests</div><button class="btn btn-ghost btn-sm" onclick="showPanel('requests')">See all →</button></div>
         <div id="overviewRequests"><div class="loading"><div class="spinner"></div> Loading…</div></div>
@@ -580,7 +581,7 @@
     if (id === 'requests') { loadRequests(); clearBadge('reqBadge'); }
     if (id === 'users')    loadUsers();
     if (id === 'posts')    loadPosts();
-    if (id === 'reports')  { loadReports(); clearBadge('reportsBadge'); }
+    if (id === 'reports')  { loadReports(); loadCommentReports(); clearBadge('reportsBadge'); }
     if (id === 'logs')     loadLogs();
   }
   const _dismissedBadges = new Set();
@@ -604,14 +605,18 @@
     document.getElementById('st-banned').textContent  = stats.bannedUsers;
     document.getElementById('st-admins').textContent  = stats.admins;
     document.getElementById('st-pending').textContent = stats.pendingRequests;
+    if (document.getElementById('st-comment-reports')) {
+      document.getElementById('st-comment-reports').textContent = stats.commentReports ?? '—';
+    }
     if (stats.pendingRequests > 0 && !_dismissedBadges.has('reqBadge')) {
       const b = document.getElementById('reqBadge');
       b.textContent = stats.pendingRequests;
       b.style.display = '';
     }
-    if (stats.reportedPosts > 0 && !_dismissedBadges.has('reportsBadge')) {
+    const totalReports = (stats.reportedPosts || 0) + (stats.commentReports || 0);
+    if (totalReports > 0 && !_dismissedBadges.has('reportsBadge')) {
       const b = document.getElementById('reportsBadge');
-      b.textContent = stats.reportedPosts;
+      b.textContent = totalReports;
       b.style.display = '';
     }
     // show first 3 pending requests inline
@@ -913,6 +918,7 @@
 
   async function loadCommentReports() {
     const el = document.getElementById('commentReportsList');
+    // Pre-load in background – don't change display (tab controls that)
     el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
     const reports = await sb.getCommentReports();
     if (!reports || !reports.length) {
