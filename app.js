@@ -250,6 +250,8 @@ function setUser(me) {
     App.isSuperAdmin = p.role === 'super_admin';
     connectDMSSE(p.uid);
     connectUserSSE(p.uid);
+    // Restore badge from persisted notifications
+    _updateNotifBadge();
 }
 
 // ── RENDER ENGINE ─────────────────────────────────────────────────────────────
@@ -1963,22 +1965,53 @@ function updateMatchDot() {
 }
 
 // ── NOTIFICATION SYSTEM ──────────────────────────────────────────────────────
-// Notifications stored in-memory, split into new/history
+// Notifications persisted to localStorage so they survive page refresh.
+const _NOTIF_KEY = 'fi_notifications';
+const _NOTIF_MAX = 50;  // keep at most 50 notifications
+
 let _notifications = [];       // {id, type, text, seen, ts, meta}
 let _notifPanelOpen = false;
+
+// Restore notifications from localStorage on boot
+(function _restoreNotifs() {
+    try {
+        const saved = localStorage.getItem(_NOTIF_KEY);
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed)) _notifications = parsed;
+        }
+    } catch(e) { _notifications = []; }
+})();
+
+function _saveNotifs() {
+    try {
+        // Only keep the most recent MAX notifications to avoid localStorage bloat
+        localStorage.setItem(_NOTIF_KEY, JSON.stringify(_notifications.slice(0, _NOTIF_MAX)));
+    } catch(e) {}
+}
 
 function _addNotification(type, text, meta = {}) {
     const notif = { id: Date.now() + Math.random(), type, text, seen: false, ts: new Date().toISOString(), meta };
     _notifications.unshift(notif);
+    _saveNotifs();
     _updateNotifBadge();
 }
 
 function _updateNotifBadge() {
-    const dot    = document.getElementById('matchDot');
-    const unseen = _notifications.filter(n => !n.seen).length;
+    const dot = document.getElementById('matchDot');
     if (!dot) return;
-    if (unseen > 0) {
-        dot.textContent = unseen;
+    // Count individual items: each match notification may contain multiple matches
+    let count = 0;
+    _notifications.forEach(n => {
+        if (n.seen) return;
+        if (n.type === 'match' && n.meta?.matches?.length) {
+            count += n.meta.matches.length;  // count each matched post separately
+        } else {
+            count += 1;
+        }
+    });
+    if (count > 0) {
+        dot.textContent = count;
         dot.style.display = '';
         dot.style.background = 'var(--accent)';
     } else {
@@ -2024,6 +2057,7 @@ function _renderNotifPanel(tab) {
         const seenNow = new Set(newItems.map(n => n.id));
         setTimeout(() => {
             _notifications.forEach(n => { if (seenNow.has(n.id)) n.seen = true; });
+            _saveNotifs();  // persist seen state
             _updateNotifBadge();
         }, 2000);
     }
@@ -2082,6 +2116,7 @@ function _renderNotifPanel(tab) {
 
 function clearHistoryNotifs() {
     _notifications = _notifications.filter(n => !n.seen);
+    _saveNotifs();
     _renderNotifPanel('history');
 }
 
