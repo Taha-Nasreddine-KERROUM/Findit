@@ -403,6 +403,7 @@
   // ── STATE ──────────────────────────────────────────────────────────────────────
   let ME = null;
   let ALL_USERS = [];
+  function meId() { return ME?.profile?.id || ME?.id || null; }
   let ALL_POSTS = [];
   let currentRoleTarget = null;
   let currentAlertTarget = null;
@@ -581,7 +582,7 @@
     if (id === 'requests') { loadRequests(); clearBadge('reqBadge'); }
     if (id === 'users')    loadUsers();
     if (id === 'posts')    loadPosts();
-    if (id === 'reports')  { loadReports(); loadCommentReports(); clearBadge('reportsBadge'); }
+    if (id === 'reports')  { loadBothReports(); clearBadge('reportsBadge'); }
     if (id === 'logs')     loadLogs();
   }
   const _dismissedBadges = new Set();
@@ -654,7 +655,7 @@
   async function approveRequest(reqId, userId) {
     await sb.setRole(userId, 'admin');
     await sb.reviewRequest(reqId, 'approved', ME.profile.id);
-    await sb.logAction(ME.profile.id, 'approve_request', userId, null, 'Approved admin request');
+    await sb.logAction(meId(), 'approve_request', userId, null, 'Approved admin request');
     document.getElementById('req-' + reqId)?.remove();
     toast('Access granted — user is now Admin', 'success');
     loadOverview();
@@ -662,7 +663,7 @@
 
   async function rejectRequest(reqId) {
     await sb.reviewRequest(reqId, 'rejected', ME.profile.id);
-    await sb.logAction(ME.profile.id, 'reject_request', null, null, `Rejected request ${reqId}`);
+    await sb.logAction(meId(), 'reject_request', null, null, `Rejected request ${reqId}`);
     document.getElementById('req-' + reqId)?.remove();
     toast('Request rejected');
   }
@@ -818,21 +819,21 @@
     if (!currentRoleTarget) return;
     const role = document.getElementById('roleSelect').value;
     await sb.setRole(currentRoleTarget.id, role);
-    await sb.logAction(ME.profile.id, role === 'user' ? 'demote' : 'promote', currentRoleTarget.id, null, `Set role to ${role}`);
+    await sb.logAction(meId(), role === 'user' ? 'demote' : 'promote', currentRoleTarget.id, null, `Set role to ${role}`);
     closeRoleModal();
     loadUsers();
     toast(`u/${currentRoleTarget.uid} is now ${role}`, 'success');
   }
 
   async function doBan(userId, uid) {
-    await sb.banUser(userId, ME.profile.id, 'Banned via admin panel');
-    await sb.logAction(ME.profile.id, 'ban', userId, null, 'Banned via admin panel');
+    await sb.banUser(userId, meId(), 'Banned via admin panel');
+    await sb.logAction(meId(), 'ban', userId, null, 'Banned via admin panel');
     loadUsers();
     toast(`u/${uid} has been banned`);
   }
   async function doUnban(userId, uid) {
-    await sb.unbanUser(userId, ME.profile.id, 'Unbanned via admin panel');
-    await sb.logAction(ME.profile.id, 'unban', userId, null, 'Unbanned via admin panel');
+    await sb.unbanUser(userId, meId(), 'Unbanned via admin panel');
+    await sb.logAction(meId(), 'unban', userId, null, 'Unbanned via admin panel');
     loadUsers();
     toast(`u/${uid} unbanned`, 'success');
   }
@@ -848,10 +849,10 @@
     if (!currentAlertTarget) return;
     const note = document.getElementById('alertMsg').value.trim();
     const res  = await sb.sendAlert(currentAlertTarget.uid, note);
-    await sb.logAction(ME.profile.id, 'alert', currentAlertTarget.id, null, note || 'Alert issued');
+    await sb.logAction(meId(), 'alert', currentAlertTarget.id, null, note || 'Alert issued');
     closeAlertModal();
     if (res?.auto_banned) {
-      await sb.logAction(ME.profile.id, 'ban', currentAlertTarget.id, null, 'Auto-banned after 5 alerts');
+      await sb.logAction(meId(), 'ban', currentAlertTarget.id, null, 'Auto-banned after 5 alerts');
       toast(`u/${currentAlertTarget.uid} has reached 5 alerts and has been auto-banned`);
       loadUsers();
     } else {
@@ -861,6 +862,22 @@
 
   // ── REPORTS ──────────────────────────────────────────────────────────────────
   let _reportTab = 'posts';
+
+  async function loadBothReports() {
+    // Load both in parallel; auto-switch to the tab with content
+    await Promise.all([loadReports(), loadCommentReports()]);
+    const postsList    = document.getElementById('reportsList');
+    const commentsList = document.getElementById('commentReportsList');
+    const hasPostReports    = !!postsList?.querySelector('.req-card');
+    const hasCommentReports = !!commentsList?.querySelector('.req-card');
+    if (!hasPostReports && hasCommentReports) {
+      // No post reports but there are comment reports – show that tab
+      switchReportTab('comments');
+    } else {
+      // Default to posts tab (or posts has content)
+      switchReportTab('posts');
+    }
+  }
 
   function switchReportTab(tab) {
     _reportTab = tab;
@@ -890,8 +907,10 @@
   async function loadReports() {
     const el = document.getElementById('reportsList');
     el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
-    const reports = await sb.getReports();
-    if (!reports || !reports.length) {
+    let reports;
+    try { reports = await sb.getReports(); } catch(e) { reports = []; }
+    if (!Array.isArray(reports)) reports = [];
+    if (!reports.length) {
       el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">No reported posts — all clear.</div>';
       return;
     }
@@ -918,10 +937,11 @@
 
   async function loadCommentReports() {
     const el = document.getElementById('commentReportsList');
-    // Pre-load in background – don't change display (tab controls that)
     el.innerHTML = '<div class="loading"><div class="spinner"></div> Loading…</div>';
-    const reports = await sb.getCommentReports();
-    if (!reports || !reports.length) {
+    let reports;
+    try { reports = await sb.getCommentReports(); } catch(e) { reports = []; }
+    if (!Array.isArray(reports)) reports = [];
+    if (!reports.length) {
       el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">No reported comments — all clear.</div>';
       return;
     }
@@ -965,9 +985,14 @@
   async function doDeleteComment(commentId) {
     if (!confirm('Delete this comment? This cannot be undone.')) return;
     await sb.deleteCommentAndReport(commentId);
-    await sb.logAction(ME.profile.id, 'delete_comment', null, null, 'Deleted reported comment');
+    await sb.logAction(meId(), 'delete_comment', null, null, 'Deleted reported comment');
     document.getElementById('creport-' + commentId)?.remove();
+    const el = document.getElementById('commentReportsList');
+    if (el && !el.querySelector('.req-card')) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">No reported comments — all clear.</div>';
+    }
     toast('Comment deleted');
+    loadOverview();
   }
 
   async function dismissReport(postId) {
@@ -976,9 +1001,9 @@
     const el = document.getElementById('reportsList');
     if (!el.querySelector('.req-card')) {
       el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">No reported posts — all clear.</div>';
-      clearBadge('reportsBadge');
     }
     toast('Report dismissed');
+    loadOverview(); // refresh badge counts
   }
 
   // ── POST ACTIONS ──────────────────────────────────────────────────────────────
@@ -986,7 +1011,7 @@
     if (!confirm('Delete this post? This cannot be undone.')) return;
     await sb.deletePost(postId);
     await sb.deleteReport(postId);
-    await sb.logAction(ME.profile.id, 'delete_post', null, postId, 'Deleted via admin panel');
+    await sb.logAction(meId(), 'delete_post', null, postId, 'Deleted via admin panel');
     document.getElementById('report-' + postId)?.remove();
     loadPosts();
     toast('Post deleted');
