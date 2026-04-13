@@ -179,8 +179,14 @@ const sb = (() => {
     async function reportPost(postId, reason) {
         return api(`/reports/${postId}`, { method:'POST', body: JSON.stringify({reason}) });
     }
-    async function getReports() { return api('/reports') || []; }
-    async function getCommentReports() { return api('/reports/comments') || []; }
+    async function getReports() {
+        const r = await api('/reports');
+        return Array.isArray(r) ? r : [];
+    }
+    async function getCommentReports() {
+        const r = await api('/reports/comments');
+        return Array.isArray(r) ? r : [];
+    }
     async function deleteCommentReport(commentId) {
         return api(`/reports/comments/${commentId}`, { method:'DELETE' });
     }
