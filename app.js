@@ -2244,30 +2244,37 @@ async function runAiSearch(query) {
     const feed = document.getElementById('feed');
     if (feed) feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">✨ Searching…</div>';
 
-    // Run server-side semantic search (SigLIP text→image) + keyword hybrid
+    // 1. Server-side hybrid search (SigLIP semantic + keyword)
     let raw = [];
-    try { raw = await sb.aiSearch(query); } catch(e) { console.error('[ai search]', e); }
+    try {
+        raw = await sb.aiSearch(query);
+        if (!Array.isArray(raw)) raw = []; // guard against error objects
+    } catch(e) {
+        console.error('[ai search]', e);
+        raw = [];
+    }
     if (!_aiSearchActive) return;
 
-    // Map server results — fix image URLs
+    // Map server results — normalise image URLs
     const seenIds = new Set();
-    let cards = (raw || []).map(r => {
+    let cards = raw.map(r => {
         const card = mapRow(r);
-        card._similarity = r.similarity || null;
-        if (r.image_url && !r.image_url.startsWith('http')) {
-            card._imageUrl = sb.API_BASE + r.image_url;
-        }
+        card._similarity = typeof r.similarity === 'number' ? r.similarity : null;
         seenIds.add(card.id);
         return card;
     });
 
-    // Also search local POSTS array by keyword so text-only posts appear too
+    // 2. Local keyword fallback — catches posts server missed (no embedding,
+    //    cold start, etc.). Split query into words for partial matching.
     const q = query.toLowerCase().trim();
-    if (q.length > 0) {
+    const words = q.split(/\s+/).filter(w => w.length >= 2);
+    if (words.length > 0) {
         const kwMatches = POSTS.filter(p => {
             if (seenIds.has(p.id)) return false;
-            return [p.title, p.desc, p.location, p.category, p.owner]
-                .some(s => s.toLowerCase().includes(q));
+            const haystack = [p.title, p.desc, p.location, p.category, p.owner]
+                .join(' ').toLowerCase();
+            // match if ANY query word appears in the haystack
+            return words.some(w => haystack.includes(w));
         }).map(p => ({ ...p, _similarity: null }));
         cards = [...cards, ...kwMatches];
     }
