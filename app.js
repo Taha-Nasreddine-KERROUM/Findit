@@ -1340,7 +1340,6 @@ async function submitPost() {
     if (!App.isLoggedIn) return;
     // reset previous auto-match results for this new post
     _matches = [];
-    _matchesSeen = false;
     updateMatchDot();
     closeNotifPanel();
     const title    = document.getElementById('postTitle').value.trim();
