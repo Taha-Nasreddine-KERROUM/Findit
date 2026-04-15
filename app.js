@@ -960,14 +960,16 @@ async function openProfile(name, initials, color, uid, profileId) {
         const r = stats.role;
         const b = stats.badge;
         const roleBadge = r === 'super_admin'
-            ? '<span class="badge-verified gold" title="Super Admin" style="margin-left:5px">✓</span>'
+            ? '<span class="badge-verified gold" title="Super Admin">✓</span>'
             : r === 'admin'
-            ? '<span class="badge-verified purple" title="Admin" style="margin-left:5px">✓</span>'
+            ? '<span class="badge-verified purple" title="Admin">✓</span>'
             : '';
         const userBadge = b === 'student'
-            ? '<span style="font-size:11px;background:rgba(91,141,255,.15);color:#5b8dff;border:1px solid rgba(91,141,255,.3);border-radius:5px;padding:2px 7px;margin-left:6px;vertical-align:middle">🎓 Student</span>'
+            ? '<span style="font-size:11px;background:rgba(91,141,255,.15);color:#5b8dff;border:1px solid rgba(91,141,255,.3);border-radius:5px;padding:2px 7px;vertical-align:middle">🎓 Student</span>'
             : b === 'staff'
-            ? '<span style="font-size:11px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:5px;padding:2px 7px;margin-left:6px;vertical-align:middle">🏫 Staff</span>'
+            ? '<span style="font-size:11px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:5px;padding:2px 7px;vertical-align:middle">🏫 Staff</span>'
+            : b === 'verified'
+            ? '<span style="font-size:11px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:5px;padding:2px 7px;vertical-align:middle">✅ Verified</span>'
             : '';
         pvb.innerHTML = roleBadge + userBadge;
     }
