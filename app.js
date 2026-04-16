@@ -307,7 +307,7 @@ function buildCard(post) {
              onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">${post.ownerInitials}</div>
         <div class="card-meta">
           <span class="location-tag" onclick="openLocation('${safeLocation}')">${post.location}</span>
-          <span class="username" onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">u/${post.owner}${post.ownerRole==='super_admin'?'<span class="badge-verified gold" title="Super Admin">✓</span>':post.ownerRole==='admin'?'<span class="badge-verified purple" title="Admin">✓</span>':''}${post.ownerBadge==='student'?'<span style="font-size:10px;background:rgba(91,141,255,.15);color:#5b8dff;border:1px solid rgba(91,141,255,.3);border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">🎓 Student</span>':post.ownerBadge==='staff'?'<span style="font-size:10px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:4px;padding:1px 5px;margin-left:4px;vertical-align:middle">🏫 Staff</span>':''}</span>
+          <span class="username" onclick="openProfile('${safeOwnerName}','${safeOwnerInitials}','${safeOwnerColor}','${safeOwner}','${post.ownerId}')">u/${post.owner}${post.ownerRole==='super_admin'?'<span class="badge-verified gold" title="Super Admin">✓</span>':post.ownerRole==='admin'?'<span class="badge-verified purple" title="Admin">✓</span>':''}${post.ownerBadge==='student'?'<span style="font-size:10px;background:rgba(91,141,255,.15);color:#5b8dff;border:1px solid rgba(91,141,255,.3);border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:middle;white-space:nowrap">Student</span>':post.ownerBadge==='staff'?'<span style="font-size:10px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:4px;padding:1px 6px;margin-left:4px;vertical-align:middle;white-space:nowrap">Staff</span>':''}</span>
         </div>
         <div class="card-right">
           <div class="card-status-row">
@@ -965,11 +965,11 @@ async function openProfile(name, initials, color, uid, profileId) {
             ? '<span class="badge-verified purple" title="Admin">✓</span>'
             : '';
         const userBadge = b === 'student'
-            ? '<span style="font-size:11px;background:rgba(91,141,255,.15);color:#5b8dff;border:1px solid rgba(91,141,255,.3);border-radius:5px;padding:2px 7px;vertical-align:middle">🎓 Student</span>'
+            ? '<span style="font-size:10px;background:rgba(91,141,255,.15);color:#5b8dff;border:1px solid rgba(91,141,255,.3);border-radius:4px;padding:1px 6px;white-space:nowrap">Student</span>'
             : b === 'staff'
-            ? '<span style="font-size:11px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:5px;padding:2px 7px;vertical-align:middle">🏫 Staff</span>'
+            ? '<span style="font-size:10px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:4px;padding:1px 6px;white-space:nowrap">Staff</span>'
             : b === 'verified'
-            ? '<span style="font-size:11px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:5px;padding:2px 7px;vertical-align:middle">✅ Verified</span>'
+            ? '<span style="font-size:10px;background:rgba(34,201,122,.15);color:#22c97a;border:1px solid rgba(34,201,122,.3);border-radius:4px;padding:1px 6px;white-space:nowrap">Verified</span>'
             : '';
         pvb.innerHTML = roleBadge + userBadge;
     }
@@ -1680,6 +1680,8 @@ function openAdminRequestModal() {
     document.getElementById('adminReqForm').style.display = '';
     clearArId();
     document.getElementById('arUid').value = App.currentUser?.uid || '';
+    const btn = document.getElementById('adminReqBtn');
+    if (btn) { btn.textContent = 'Submit'; btn.disabled = false; }
     document.body.style.overflow = 'hidden';
 }
 function closeAdminReqModal() {
