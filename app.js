@@ -2443,7 +2443,16 @@ async function _scanLoop() {
             const result = await sb.findItemInFrame(blob, _cameraRefBlob, _cameraQueryText);
             if (!_cameraScanning) return;
 
-            // Always show what word YOLO is actually searching for
+            // ── Key fix: once the server tells us what noun it derived from the
+            // reference image, promote it to _cameraQueryText and drop the blob.
+            // Every subsequent frame now goes through the fast text-query YOLO
+            // path instead of re-uploading the image and re-running Florence.
+            if (result && result.label && result.label !== '?' && _cameraRefBlob) {
+                _cameraQueryText = result.label;
+                _cameraRefBlob   = null;
+            }
+
+            // Always show what YOLO is actually searching for
             if (result && result.label && result.label !== '?') {
                 document.getElementById('cameraTargetLabel').textContent = `🔍 Searching: "${result.label}"`;
             }
