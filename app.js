@@ -1622,10 +1622,12 @@ async function doRegister() {
             err.style.display = ''; return;
         }
 
-        // Show badge toast if detected
-        if (res.badge && res.badge !== 'none') {
+        // Show badge toast if detected synchronously, or let SSE handle it if pending
+        if (res.badge && res.badge !== 'none' && res.badge !== 'pending') {
             const label = res.badge === 'student' ? '🎓 Student' : res.badge === 'staff' ? '🏫 Staff' : '✅ Verified';
             showToast(`${label} badge added to your profile!`);
+        } else if (res.badge === 'pending') {
+            showToast('Verifying your ID in the background…');
         }
         // Save token so session persists across refreshes (bypassed sb.register, must save manually)
         if (res.token) {
@@ -2152,12 +2154,21 @@ function connectUserSSE(uid) {
                 const msg = data.note ? `⚠️ Alert from admin: ${data.note}` : '⚠️ You received an admin alert.';
                 _addNotification('alert', msg);
                 showToast(msg);
-                // If panel already open, re-render so new alert shows immediately.
-                // If closed, just leave badge lit – user will click to see it.
                 const _ap = document.getElementById('notifPanel');
                 if (_ap && _ap.style.display !== 'none') {
                     _renderNotifPanel('new');
                 }
+            }
+            if (data.type === 'badge_granted') {
+                // ID verification completed in background after registration
+                if (App.currentUser) App.currentUser.badge = data.badge;
+                // Update ownerBadge on this user's cards in the feed
+                POSTS.forEach(p => {
+                    if (p.owner === App.currentUser?.uid) p.ownerBadge = data.badge;
+                });
+                renderFeed();
+                updateMenuState();
+                showToast(data.message || `Badge added to your profile!`);
             }
             if (data.type === 'banned') {
                 // Force immediate sign-out — no reload needed
