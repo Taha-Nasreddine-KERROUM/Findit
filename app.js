@@ -410,7 +410,7 @@ function toggleAiSearch() {
     } else if (q.length > 1) {
         runAiSearch(q);
     } else {
-        showToast('✨ AI search on — type what you\'re looking for');
+        showToast('AI search on — type what you\'re looking for');
     }
 }
 
@@ -1141,7 +1141,7 @@ async function openDMThread(otherUid, name, initials, color) {
 function renderDMMessages(messages) {
     const msgs = document.getElementById('dmMessages');
     if (!messages.length) {
-        msgs.innerHTML = '<div style="text-align:center;padding:40px 16px;color:var(--muted);font-size:13px">No messages yet. Say hi! 👋</div>';
+        msgs.innerHTML = '<div style="text-align:center;padding:40px 16px;color:var(--muted);font-size:13px">No messages yet. Say hi!</div>';
         return;
     }
     msgs.innerHTML = messages.map(m => {
@@ -1624,7 +1624,7 @@ async function doRegister() {
 
         // Show badge toast if detected synchronously, or let SSE handle it if pending
         if (res.badge && res.badge !== 'none' && res.badge !== 'pending') {
-            const label = res.badge === 'student' ? '🎓 Student' : res.badge === 'staff' ? '🏫 Staff' : '✅ Verified';
+            const label = res.badge === 'student' ? 'Student' : res.badge === 'staff' ? 'Staff' : 'Verified';
             showToast(`${label} badge added to your profile!`);
         } else if (res.badge === 'pending') {
             showToast('Verifying your ID in the background…');
@@ -2291,7 +2291,7 @@ async function triggerAutoFill() {
             if (match) catEl.value = match.value;
         }
 
-        showToast('✨ Form auto-filled! Edit anything that looks wrong.');
+        showToast('Form auto-filled! Edit anything that looks wrong.');
     } catch(e) {
         showToast('Auto-fill failed: ' + e.message);
     } finally {
@@ -2426,7 +2426,7 @@ async function startCameraSearch() {
         showToast('Enter what you are looking for or add a reference photo');
         return;
     }
-    const label = _cameraQueryText || '📷 Reference photo';
+    const label = _cameraQueryText || 'Reference photo';
     document.getElementById('cameraTargetLabel').textContent = '🔍 ' + label;
     document.getElementById('cameraSetup').style.display = 'none';
     document.getElementById('cameraLive').style.display  = 'flex';
@@ -2496,7 +2496,7 @@ async function _scanLoop() {
                 _cameraLastFound = true;
                 const label = result.label || _cameraQueryText || 'item';
                 _drawBox(result.box, label, result.confidence);
-                _setCameraStatus('found', `✅ ${Math.round(result.confidence * 100)}% confident`);
+                _setCameraStatus('found', `${Math.round(result.confidence * 100)}% confident`);
             } else {
                 _clearCanvas();
                 if (!_cameraLastFound) _setCameraStatus('scanning', '🔍 Scanning…');
