@@ -2667,7 +2667,7 @@ async function submitVerifyId() {
         // The real result arrives via SSE badge_result event (handled in connectUserSSE)
         if (res.ok === 'pending' || res.ok === true) {
             resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(91,141,255,.08);color:#5b8dff;border:1px solid rgba(91,141,255,.2)';
-            resultEl.textContent = '🔍 Analysing your ID, this may take up to 30 seconds…';
+            resultEl.textContent = 'Analysing your ID, this may take up to 30 seconds…';
             // btn stays disabled — SSE handler will reset it when done
         } else {
             resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(255,80,80,.1);color:#ff6b6b;border:1px solid rgba(255,80,80,.25)';
