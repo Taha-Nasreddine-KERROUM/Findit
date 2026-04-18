@@ -334,8 +334,18 @@
 
       <!-- ── REPORTS ── -->
       <div class="panel" id="panel-reports">
-        <div id="reportsList"></div>
-        <div id="commentReportsList"></div>
+        <div style="display:flex;gap:6px;margin-bottom:16px;background:var(--surface2);border-radius:10px;padding:3px;width:fit-content">
+          <button id="reportTabPosts" onclick="switchReportTab('posts')"
+            style="padding:6px 18px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--surface);color:var(--text);font-family:inherit">
+            Posts
+          </button>
+          <button id="reportTabComments" onclick="switchReportTab('comments')"
+            style="padding:6px 18px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:var(--muted);font-family:inherit">
+            Comments
+          </button>
+        </div>
+        <div id="reportsList"><div class="loading"><div class="spinner"></div> Loading…</div></div>
+        <div id="commentReportsList" style="display:none"><div class="loading"><div class="spinner"></div> Loading…</div></div>
       </div>
 
       <!-- ── MOD LOG ── -->
@@ -851,8 +861,41 @@
   }
 
   // ── REPORTS ──────────────────────────────────────────────────────────────────
+  let _reportTab = 'posts';
+
   async function loadBothReports() {
+    // Load both in parallel; auto-switch to the tab with content
     await Promise.all([loadReports(), loadCommentReports()]);
+    const postsList    = document.getElementById('reportsList');
+    const commentsList = document.getElementById('commentReportsList');
+    const hasPostReports    = !!postsList?.querySelector('.req-card');
+    const hasCommentReports = !!commentsList?.querySelector('.req-card');
+    if (!hasPostReports && hasCommentReports) {
+      // No post reports but there are comment reports – show that tab
+      switchReportTab('comments');
+    } else {
+      // Default to posts tab (or posts has content)
+      switchReportTab('posts');
+    }
+  }
+
+  function switchReportTab(tab) {
+    _reportTab = tab;
+    const btnPosts    = document.getElementById('reportTabPosts');
+    const btnComments = document.getElementById('reportTabComments');
+    const listPosts   = document.getElementById('reportsList');
+    const listComments= document.getElementById('commentReportsList');
+    if (tab === 'posts') {
+      btnPosts.style.background = 'var(--surface)'; btnPosts.style.color = 'var(--text)';
+      btnComments.style.background = 'transparent'; btnComments.style.color = 'var(--muted)';
+      listPosts.style.display = ''; listComments.style.display = 'none';
+      loadReports();
+    } else {
+      btnComments.style.background = 'var(--surface)'; btnComments.style.color = 'var(--text)';
+      btnPosts.style.background = 'transparent'; btnPosts.style.color = 'var(--muted)';
+      listPosts.style.display = 'none'; listComments.style.display = '';
+      loadCommentReports();
+    }
   }
 
   function _resolveImg(url) {
@@ -868,10 +911,10 @@
     try { reports = await sb.getReports(); } catch(e) { reports = []; }
     if (!Array.isArray(reports)) reports = [];
     if (!reports.length) {
-      el.innerHTML = '';
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">No reported posts — all clear.</div>';
       return;
     }
-    el.innerHTML = '<div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;margin-bottom:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Reported Posts</div>' + reports.map(r => {
+    el.innerHTML = reports.map(r => {
       const imgSrc = _resolveImg(r.image_url);
       return `
     <div class="req-card" id="report-${r.id}">
@@ -899,34 +942,29 @@
     try { reports = await sb.getCommentReports(); } catch(e) { reports = []; }
     if (!Array.isArray(reports)) reports = [];
     if (!reports.length) {
-      el.innerHTML = '';
+      el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:24px;text-align:center">No reported comments — all clear.</div>';
       return;
     }
-    el.innerHTML = '<div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;margin-bottom:12px;margin-top:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Reported Comments</div>' + reports.map(r => {
+    el.innerHTML = reports.map(r => {
       const commentImg = _resolveImg(r.comment_image_url);
       const postImg    = _resolveImg(r.post_image_url);
-      const postImgHtml    = postImg    ? '<img src="' + postImg    + '" style="max-width:100%;max-height:180px;border-radius:8px;margin-top:8px;object-fit:contain;border:1px solid var(--border);display:block">' : '';
-      const commentImgHtml = commentImg ? '<img src="' + commentImg + '" style="max-width:100%;max-height:200px;border-radius:8px;margin-top:8px;object-fit:contain;border:1px solid var(--border);display:block">' : '';
       return `
     <div class="req-card" id="creport-${r.comment_id}">
       <div class="req-head" style="margin-bottom:10px">
         <div style="flex:1;min-width:0">
           <div class="req-name" style="font-size:14px">Comment by u/${esc(r.author_uid)}</div>
-          <div class="req-meta">${formatDate(r.report_date)}</div>
+          <div class="req-meta">on post: "${esc(r.post_title)}" · ${formatDate(r.report_date)}</div>
         </div>
         <span style="background:rgba(224,90,90,0.12);color:var(--danger);border:1px solid rgba(224,90,90,0.25);border-radius:50px;padding:3px 10px;font-size:11px;font-weight:700;flex-shrink:0">⚑ Reported</span>
       </div>
-      <div style="background:rgba(91,141,255,0.08);border:1px solid rgba(91,141,255,0.25);border-radius:10px;padding:11px 13px;margin-bottom:8px">
-        <div style="font-size:11px;color:var(--accent);margin-bottom:5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">📄 Post</div>
-        <div style="font-size:13px;font-weight:600;line-height:1.4">${esc(r.post_title)}</div>
-        ${postImgHtml}
+      <!-- The actual comment content -->
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:10px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600">💬 REPORTED COMMENT</div>
+        ${r.comment_body ? `<div style="font-size:13px;line-height:1.55">${esc(r.comment_body)}</div>` : ''}
+        ${commentImg ? `<img src="${commentImg}" style="max-width:100%;max-height:200px;border-radius:8px;margin-top:8px;object-fit:contain;border:1px solid var(--border);display:block">` : ''}
       </div>
-      <div style="background:rgba(224,90,90,0.08);border:1px solid rgba(224,90,90,0.25);border-radius:10px;padding:11px 13px;margin-bottom:10px">
-        <div style="font-size:11px;color:var(--danger);margin-bottom:5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px">💬 Reported Comment</div>
-        <div style="font-size:13px;line-height:1.55">${esc(r.comment_body || '')}</div>
-        ${commentImgHtml}
-      </div>
-      ${r.reason ? '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Reason: ' + esc(r.reason.replace(/^comment:[^:]+:/,'')) + '</div>' : ''}
+      ${postImg ? `<div style="margin-bottom:8px"><div style="font-size:11px;color:var(--muted);margin-bottom:4px">Post image:</div><img src="${postImg}" style="max-width:100%;max-height:140px;border-radius:8px;object-fit:contain;border:1px solid var(--border);display:block"></div>` : ''}
+      ${r.reason ? `<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Reason: ${esc(r.reason.replace(/^comment:[^:]+:/,''))}</div>` : ''}
       <div class="req-actions">
         <button class="btn btn-danger btn-sm" onclick="doDeleteComment('${r.comment_id}')">Delete Comment</button>
         <button class="btn btn-ghost btn-sm" onclick="dismissCommentReport('${r.comment_id}')">Dismiss</button>
