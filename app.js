@@ -2162,13 +2162,37 @@ function connectUserSSE(uid) {
             if (data.type === 'badge_granted') {
                 // ID verification completed in background after registration
                 if (App.currentUser) App.currentUser.badge = data.badge;
-                // Update ownerBadge on this user's cards in the feed
                 POSTS.forEach(p => {
                     if (p.owner === App.currentUser?.uid) p.ownerBadge = data.badge;
                 });
                 renderFeed();
                 updateMenuState();
                 showToast(data.message || `Badge added to your profile!`);
+            }
+            if (data.type === 'badge_result') {
+                // Result of Verify Your Identity flow (post-login verify modal)
+                const btn = document.getElementById('verifySubmitBtn');
+                const resultEl = document.getElementById('verifyResult');
+                if (data.ok && data.badge !== 'none') {
+                    if (App.currentUser) App.currentUser.badge = data.badge;
+                    POSTS.forEach(p => {
+                        if (p.owner === App.currentUser?.uid) p.ownerBadge = data.badge;
+                    });
+                    renderFeed();
+                    updateMenuState();
+                    if (resultEl) {
+                        resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(34,201,122,.1);color:#22c97a;border:1px solid rgba(34,201,122,.25)';
+                        resultEl.textContent = data.message;
+                    }
+                    if (btn) { btn.textContent = 'Done'; btn.disabled = false; btn.setAttribute('onclick', 'closeVerifyModal()'); }
+                    showToast(data.message);
+                } else {
+                    if (resultEl) {
+                        resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(255,80,80,.1);color:#ff6b6b;border:1px solid rgba(255,80,80,.25)';
+                        resultEl.textContent = data.message || 'Could not verify ID. Make sure the card is clearly visible.';
+                    }
+                    if (btn) { btn.textContent = 'Try Again'; btn.disabled = false; }
+                }
             }
             if (data.type === 'banned') {
                 // Force immediate sign-out — no reload needed
@@ -2639,39 +2663,21 @@ async function submitVerifyId() {
         });
         const res = await r.json();
 
-        if (res.ok && res.badge !== 'none') {
-            // 1. Update in-memory user state
-            if (App.currentUser) App.currentUser.badge = res.badge;
-
-            // 2. Update ownerBadge on every post by this user so cards re-render immediately
-            if (App.currentUser) {
-                POSTS.forEach(p => {
-                    if (p.owner === App.currentUser.uid) p.ownerBadge = res.badge;
-                });
-                renderFeed();
-            }
-
-            // 3. Refresh menu (Verify vs Change Status toggle)
-            updateMenuState();
-
-            resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(34,201,122,.1);color:#22c97a;border:1px solid rgba(34,201,122,.25)';
-            resultEl.textContent = res.message;
-            btn.textContent = 'Done';
-            btn.disabled = false;
-            // Use setAttribute so openVerifyModal can safely reset it next time
-            btn.setAttribute('onclick', 'closeVerifyModal()');
-            showToast(res.message);
+        // Backend always returns immediately with ok:'pending'
+        // The real result arrives via SSE badge_result event (handled in connectUserSSE)
+        if (res.ok === 'pending' || res.ok === true) {
+            resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(91,141,255,.08);color:#5b8dff;border:1px solid rgba(91,141,255,.2)';
+            resultEl.textContent = '🔍 Analysing your ID, this may take up to 30 seconds…';
+            // btn stays disabled — SSE handler will reset it when done
         } else {
             resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(255,80,80,.1);color:#ff6b6b;border:1px solid rgba(255,80,80,.25)';
-            resultEl.textContent = res.message || 'Could not verify ID. Make sure the card is clearly visible.';
-            btn.textContent = 'Try Again';
-            btn.disabled = false;
+            resultEl.textContent = res.message || 'Could not verify ID.';
+            btn.textContent = 'Try Again'; btn.disabled = false;
         }
     } catch(e) {
         resultEl.style.cssText = 'display:block;margin-bottom:12px;padding:10px;border-radius:8px;font-size:13px;text-align:center;background:rgba(255,80,80,.1);color:#ff6b6b;border:1px solid rgba(255,80,80,.25)';
         resultEl.textContent = 'Connection error. Please try again.';
-        btn.textContent = 'Try Again';
-        btn.disabled = false;
+        btn.textContent = 'Try Again'; btn.disabled = false;
     }
 }
 
