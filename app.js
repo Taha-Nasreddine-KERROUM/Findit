@@ -2315,7 +2315,7 @@ async function runAiSearch(query) {
     if (chip) { chip.style.display = ''; chip.classList.add('active'); }
 
     const feed = document.getElementById('feed');
-    if (feed) feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">✨ Searching…</div>';
+    if (feed) feed.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Searching…</div>';
 
     // 1. Server-side hybrid search (SigLIP semantic + keyword)
     let raw = [];
